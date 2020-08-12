@@ -88,26 +88,27 @@ class Display(QWidget):
     with_perimeter or perimeter_directed is TRUE.
   '''
   def paintEvent(self, event):
-    width = self.size().width()
-    height = self.size().height()
+    width = int(self.size().width());     height = int(self.size().height())
     lh = self.dta.shape[1]
     mdl.d_step(self.dta, **self.kwargs)
     clrs = np.where(self.dta[mdl.PRM],1,0) 
     qp = QPainter()
     qp.begin(self)
     qp.setPen(Qt.cyan)
-    for i in range(0, int(width/2), int(width/20)):
-      qp.drawLine(width/2+i,0,width/2+i,height)
-      qp.drawLine(width/2-i,0,width/2-i,height)
-    for i in range(0, int(height/2), int(height/20)):
-      qp.drawLine(0,height/2+i,width,height/2+i)
-      qp.drawLine(0,height/2-i,width,height/2-i)
+    hw = width//2;    iw = width//20
+    hh = height//2;   ih = height//20
+    for i in range(0, hw, iw):
+      qp.drawLine(hw+i,0,hw+i,height)
+      qp.drawLine(hw-i,0,hw-i,height)
+    for i in range(0, hh, ih):
+      qp.drawLine(0,hh+i,width,hh+i)
+      qp.drawLine(0,hh-i,width,hh-i)
     qp.setPen(Qt.blue)
-    qp.drawLine(0,height/2,width,height/2)
-    qp.drawLine(width/2,0,width/2,height)
+    qp.drawLine(0,hh,width,hh)
+    qp.drawLine(hw,0,hw,height)
     for i in range(lh):
-      gx = (self.dta[mdl.POS_X,i]/self.scaleFact + 0.5)*width
-      gy = (-self.dta[mdl.POS_Y,i]/self.scaleFact + 0.5)*height
+      gx = int((self.dta[mdl.POS_X,i]/self.scaleFact + 0.5)*width)
+      gy = int((-self.dta[mdl.POS_Y,i]/self.scaleFact + 0.5)*height)
       qp.setPen(pallette[clrs[i]])
       qp.drawEllipse(gx-2, gy-2, 4, 4)   
     qp.end()    
