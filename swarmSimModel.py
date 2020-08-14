@@ -44,7 +44,6 @@ REP_N  = 19   # number of repulsion neighbours
 N_ROWS = 20   # number of rows in array that models swarm state
 eps    = np.finfo('float64').eps # smallest positive 64 bit float value
 
-
 def mk_rand_swarm(n, *, cf=4.0, rf=3.0, kc=1.0, kr=1.0, kd=0.0, goal=0.0, loc=0.0, grid=10, seed=None):
     '''
     create a 2-D array of N_ROWS attributes for n agents. 
@@ -59,26 +58,23 @@ def mk_rand_swarm(n, *, cf=4.0, rf=3.0, kc=1.0, kr=1.0, kd=0.0, goal=0.0, loc=0.
     :param loc:    location of agent b_0 -- the focus of the swarm
     :param grid:   size of grid around b_0 in which all other agents will be placed initially at random
     '''
-
-    print("Random swarm n={:d}, cf={:f}, rf={:f}, kc={:f}, kr={:f}, kd={:f}, goal={:f}, loc={:f}, grid={:f}"
-                    .format(n, cf, rf, kc, kr, kd, goal, loc, grid))
     b = np.empty((N_ROWS, n))                       #create a 2-D array, big enough for n agents
     prng = np.random.default_rng(seed)
-    b[POS_X:POS_Y + 1,:] = (prng.random(size=2 * n) * 2 * grid - grid + loc).reshape(2, n) # place agents randomly
+    np.copyto(b[POS_X:POS_Y + 1,:], (prng.random(size=2 * n) * 2 * grid - grid + loc).reshape(2, n)) # place agents randomly
     b[POS_X:POS_Y + 1,0] = loc                      # b_0 placed at [loc, loc]       
-    b[COH_X:COH_Y+1,:] = np.full((2,n), 0.0)        # cohesion vectors initially [0.0, 0.0]
-    b[REP_X:REP_Y+1,:] = np.full((2,n), 0.0)        # repulsion vectors initially [0.0, 0.0]
-    b[DIR_X:DIR_Y+1,:] = np.full((2,n), 0.0)        # direction vectors initially [0.0, 0.0]
-    b[RES_X:RES_Y + 1,:] = np.full((2,n), 0.0)      # resultant vectors initially [0.0, 0.0]
-    b[GOAL_X:GOAL_Y + 1,:] = np.full((2,n), goal)   # goal is at [goal, goal], default [0.0, 0.0]
-    b[CF,:] = np.full(n, cf)                        # cohesion field of all agents set to cf
-    b[RF,:] = np.full(n, rf)                        # repulsion field of all agents set to rf
-    b[KC,:] = np.full(n, kc)                        # cohesion weight for all agents set to kc
-    b[KR,:] = np.full(n, kr)                        # repulsion weight for all agents set to kr
-    b[KD,:] = np.full(n, kd)                        # direction weight for all agents set to kd
-    b[PRM,:] = np.full(n, False)                    # initially no agents known to be on perimeter
-    b[COH_N,:] = np.full(n, 0.0)                    # initially no cohesion neighbours
-    b[REP_N,:] = np.full(n, 0.0)                    # initially no repulsion neighbours
+    b[COH_X:COH_Y+1,:] = 0.                         # cohesion vectors initially [0.0, 0.0]
+    b[REP_X:REP_Y+1,:] = 0.                         # repulsion vectors initially [0.0, 0.0]
+    b[DIR_X:DIR_Y+1,:] = 0.                         # direction vectors initially [0.0, 0.0]
+    b[RES_X:RES_Y + 1,:] = 0.                       # resultant vectors initially [0.0, 0.0]
+    b[GOAL_X:GOAL_Y + 1,:] = goal                   # goal is at [goal, goal], default [0.0, 0.0]
+    b[CF,:] = cf                                    # cohesion field of all agents set to cf
+    b[RF,:] = rf                                    # repulsion field of all agents set to rf
+    b[KC,:] = kc                                    # cohesion weight for all agents set to kc
+    b[KR,:] = kr                                    # repulsion weight for all agents set to kr
+    b[KD,:] = kd                                    # direction weight for all agents set to kd
+    b[PRM,:] = False                                # initially no agents known to be on perimeter
+    b[COH_N,:] = 0.                                 # initially no cohesion neighbours
+    b[REP_N,:] = 0.                                 # initially no repulsion neighbours
     return b
 
 def mk_swarm(xs, ys, *, cf=4.0, rf=3.0, kc=1.0, kr=1.0, kd=0.0, goal=0.0):
@@ -96,23 +92,22 @@ def mk_swarm(xs, ys, *, cf=4.0, rf=3.0, kc=1.0, kr=1.0, kd=0.0, goal=0.0):
     '''
     n = len(xs)
     assert len(ys) == n
-    print("Swarm n={:d}, cf={:f}, rf={:f}, kc={:f}, kr={:f}, kd={:f}, goal={:f}".format(n, cf, rf, kc, kr, kd, goal))
     b = np.empty((N_ROWS, n))                       # create a 2-D array, big enough for n agents
-    b[POS_X] = np.array(xs)                         # place agents as specified
-    b[POS_Y] = np.array(ys)                         # place agents as specified       
-    b[COH_X:COH_Y+1,:] = np.full((2,n), 0.0)        # cohesion vectors initially [0.0, 0.0]
-    b[REP_X:REP_Y+1,:] = np.full((2,n), 0.0)        # repulsion vectors initially [0.0, 0.0]
-    b[DIR_X:DIR_Y+1,:] = np.full((2,n), 0.0)        # direction vectors initially [0.0, 0.0]
-    b[RES_X:RES_Y + 1,:] = np.full((2,n), 0.0)      # resultant vectors initially [0.0, 0.0]
-    b[GOAL_X:GOAL_Y + 1,:] = np.full((2,n), goal)   # goal is at [goal, goal], default [0.0, 0.0]
-    b[CF,:] = np.full(n, cf)                        # cohesion field of all agents set to cf
-    b[RF,:] = np.full(n, rf)                        # repulsion field of all agents set to rf
-    b[KC,:] = np.full(n, kc)                        # cohesion weight for all agents set to kc
-    b[KR,:] = np.full(n, kr)                        # repulsion weight for all agents set to kr
-    b[KD,:] = np.full(n, kd)                        # direction weight for all agents set to kd
-    b[PRM,:] = np.full(n, False)                    # initially no agents known to be on perimeter
-    b[COH_N,:] = np.full(n, 0.0)                    # initially no cohesion neighbours
-    b[REP_N,:] = np.full(n, 0.0)                    # initially no repulsion neighbours
+    np.copyto(b[POS_X], xs)                         # place agents as specified
+    np.copyto(b[POS_Y], ys)                         # place agents as specified       
+    b[COH_X:COH_Y+1,:] = 0.                         # cohesion vectors initially [0.0, 0.0]
+    b[REP_X:REP_Y+1,:] = 0.                         # repulsion vectors initially [0.0, 0.0]
+    b[DIR_X:DIR_Y+1,:] = 0.                         # direction vectors initially [0.0, 0.0]
+    b[RES_X:RES_Y + 1,:] = 0.                       # resultant vectors initially [0.0, 0.0]
+    b[GOAL_X:GOAL_Y + 1,:] = goal                   # goal is at [goal, goal], default [0.0, 0.0]
+    b[CF,:] = cf                                    # cohesion field of all agents set to cf
+    b[RF,:] = rf                                    # repulsion field of all agents set to rf
+    b[KC,:] = kc                                    # cohesion weight for all agents set to kc
+    b[KR,:] = kr                                    # repulsion weight for all agents set to kr
+    b[KD,:] = kd                                    # direction weight for all agents set to kd
+    b[PRM,:] = False                                # initially no agents known to be on perimeter
+    b[COH_N,:] = 0.                                 # initially no cohesion neighbours
+    b[REP_N,:] = 0.                                 # initially no repulsion neighbours
     return b
 
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
