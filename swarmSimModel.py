@@ -1,8 +1,20 @@
 """
-swarmSimModel.py
- - D's suggested stability factor for reducing 'hunting' (will probably change)
- - Perimeter-packing code added to d_step ~ 2020Jul24
- - David's jit-powered onPerim2(...) ~ 2020Jul26  
+swarmSimModel.py - 2020 Aug 13
+ - stability factor for reducing 'hunting': a threshhold below which an agent's mvt in current step is clamped to 0
+ - Perimeter-packing code enhanced: effective repulsion between neighbours on perimeter is reduced:
+     both effective repulsion radius and repulsion weighting (in computation of resultant movement) are reduced by
+     p-p factor, a fractional number between 0 and 1. At the same time, cohesion weighting between these pairs is
+     boosted by the reciprocal of the p-p factor.
+ - It has been observed that agents near/on perim often hop on and off the perim too often. The tweaks just mentioned
+     are motivated partly by this. Also, the perimeter determining function function onPerim has been tweaked to
+     make it more likely neibouring perimeter agents will stay on perimeter.
+ - The d_step function has been decomposed into several subfunctions: all_pairs_mag, compute_coh, nbr_sort, (helper to)
+     onPerim, compute_erf (tweaks repulsion radius and coh, rep wgts between perimeter agents), 
+     compute_rep_linear, compute_rep_quadratic, compute_rep_exponential, update_resultant (applies stability factor)
+ - d-step creates array ecf by broadcasting cohesion radii to pairs of agents, then initialises other arrays, updates
+     with all_pairs_mag(). It then updates perimeter status of agents, computes effective repulsion and updates
+     resultant movement.
+ - d-step and all its helpers are decorated with numba @jit decorations to boost performance
 """
 import numpy as np
 from numba import jit, prange
@@ -47,23 +59,26 @@ def mk_rand_swarm(n, *, cf=4.0, rf=3.0, kc=1.0, kr=1.0, kd=0.0, goal=0.0, loc=0.
     :param loc:    location of agent b_0 -- the focus of the swarm
     :param grid:   size of grid around b_0 in which all other agents will be placed initially at random
     '''
+
+    print("Random swarm n={:d}, cf={:f}, rf={:f}, kc={:f}, kr={:f}, kd={:f}, goal={:f}, loc={:f}, grid={:f}"
+                    .format(n, cf, rf, kc, kr, kd, goal, loc, grid))
     b = np.empty((N_ROWS, n))                       #create a 2-D array, big enough for n agents
     prng = np.random.default_rng(seed)
-    np.copyto(b[POS_X:POS_Y + 1,:], (prng.random(size=2 * n) * 2 * grid - grid + loc).reshape(2, n)) # place agents randomly
+    b[POS_X:POS_Y + 1,:] = (prng.random(size=2 * n) * 2 * grid - grid + loc).reshape(2, n) # place agents randomly
     b[POS_X:POS_Y + 1,0] = loc                      # b_0 placed at [loc, loc]       
-    b[COH_X:COH_Y+1,:] = 0.                         # cohesion vectors initially [0.0, 0.0]
-    b[REP_X:REP_Y+1,:] = 0.                         # repulsion vectors initially [0.0, 0.0]
-    b[DIR_X:DIR_Y+1,:] = 0.                         # direction vectors initially [0.0, 0.0]
-    b[RES_X:RES_Y + 1,:] = 0.                       # resultant vectors initially [0.0, 0.0]
-    b[GOAL_X:GOAL_Y + 1,:] = goal                   # goal is at [goal, goal], default [0.0, 0.0]
-    b[CF,:] = cf                                    # cohesion field of all agents set to cf
-    b[RF,:] = rf                                    # repulsion field of all agents set to rf
-    b[KC,:] = kc                                    # cohesion weight for all agents set to kc
-    b[KR,:] = kr                                    # repulsion weight for all agents set to kr
-    b[KD,:] = kd                                    # direction weight for all agents set to kd
-    b[PRM,:] = False                                # initially no agents known to be on perimeter
-    b[COH_N,:] = 0.                                 # initially no cohesion neighbours
-    b[REP_N,:] = 0.                                 # initially no repulsion neighbours
+    b[COH_X:COH_Y+1,:] = np.full((2,n), 0.0)        # cohesion vectors initially [0.0, 0.0]
+    b[REP_X:REP_Y+1,:] = np.full((2,n), 0.0)        # repulsion vectors initially [0.0, 0.0]
+    b[DIR_X:DIR_Y+1,:] = np.full((2,n), 0.0)        # direction vectors initially [0.0, 0.0]
+    b[RES_X:RES_Y + 1,:] = np.full((2,n), 0.0)      # resultant vectors initially [0.0, 0.0]
+    b[GOAL_X:GOAL_Y + 1,:] = np.full((2,n), goal)   # goal is at [goal, goal], default [0.0, 0.0]
+    b[CF,:] = np.full(n, cf)                        # cohesion field of all agents set to cf
+    b[RF,:] = np.full(n, rf)                        # repulsion field of all agents set to rf
+    b[KC,:] = np.full(n, kc)                        # cohesion weight for all agents set to kc
+    b[KR,:] = np.full(n, kr)                        # repulsion weight for all agents set to kr
+    b[KD,:] = np.full(n, kd)                        # direction weight for all agents set to kd
+    b[PRM,:] = np.full(n, False)                    # initially no agents known to be on perimeter
+    b[COH_N,:] = np.full(n, 0.0)                    # initially no cohesion neighbours
+    b[REP_N,:] = np.full(n, 0.0)                    # initially no repulsion neighbours
     return b
 
 def mk_swarm(xs, ys, *, cf=4.0, rf=3.0, kc=1.0, kr=1.0, kd=0.0, goal=0.0):
@@ -81,22 +96,23 @@ def mk_swarm(xs, ys, *, cf=4.0, rf=3.0, kc=1.0, kr=1.0, kd=0.0, goal=0.0):
     '''
     n = len(xs)
     assert len(ys) == n
+    print("Swarm n={:d}, cf={:f}, rf={:f}, kc={:f}, kr={:f}, kd={:f}, goal={:f}".format(n, cf, rf, kc, kr, kd, goal))
     b = np.empty((N_ROWS, n))                       # create a 2-D array, big enough for n agents
-    np.copyto(b[POS_X], xs)                         # place agents as specified
-    np.copyto(b[POS_Y], ys)                         # place agents as specified       
-    b[COH_X:COH_Y+1,:] = 0.                         # cohesion vectors initially [0.0, 0.0]
-    b[REP_X:REP_Y+1,:] = 0.                         # repulsion vectors initially [0.0, 0.0]
-    b[DIR_X:DIR_Y+1,:] = 0.                         # direction vectors initially [0.0, 0.0]
-    b[RES_X:RES_Y + 1,:] = 0.                       # resultant vectors initially [0.0, 0.0]
-    b[GOAL_X:GOAL_Y + 1,:] = goal                   # goal is at [goal, goal], default [0.0, 0.0]
-    b[CF,:] = cf                                    # cohesion field of all agents set to cf
-    b[RF,:] = rf                                    # repulsion field of all agents set to rf
-    b[KC,:] = kc                                    # cohesion weight for all agents set to kc
-    b[KR,:] = kr                                    # repulsion weight for all agents set to kr
-    b[KD,:] = kd                                    # direction weight for all agents set to kd
-    b[PRM,:] = False                                # initially no agents known to be on perimeter
-    b[COH_N,:] = 0.                                 # initially no cohesion neighbours
-    b[REP_N,:] = 0.                                 # initially no repulsion neighbours
+    b[POS_X] = np.array(xs)                         # place agents as specified
+    b[POS_Y] = np.array(ys)                         # place agents as specified       
+    b[COH_X:COH_Y+1,:] = np.full((2,n), 0.0)        # cohesion vectors initially [0.0, 0.0]
+    b[REP_X:REP_Y+1,:] = np.full((2,n), 0.0)        # repulsion vectors initially [0.0, 0.0]
+    b[DIR_X:DIR_Y+1,:] = np.full((2,n), 0.0)        # direction vectors initially [0.0, 0.0]
+    b[RES_X:RES_Y + 1,:] = np.full((2,n), 0.0)      # resultant vectors initially [0.0, 0.0]
+    b[GOAL_X:GOAL_Y + 1,:] = np.full((2,n), goal)   # goal is at [goal, goal], default [0.0, 0.0]
+    b[CF,:] = np.full(n, cf)                        # cohesion field of all agents set to cf
+    b[RF,:] = np.full(n, rf)                        # repulsion field of all agents set to rf
+    b[KC,:] = np.full(n, kc)                        # cohesion weight for all agents set to kc
+    b[KR,:] = np.full(n, kr)                        # repulsion weight for all agents set to kr
+    b[KD,:] = np.full(n, kd)                        # direction weight for all agents set to kd
+    b[PRM,:] = np.full(n, False)                    # initially no agents known to be on perimeter
+    b[COH_N,:] = np.full(n, 0.0)                    # initially no cohesion neighbours
+    b[REP_N,:] = np.full(n, 0.0)                    # initially no repulsion neighbours
     return b
 
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
@@ -156,14 +172,9 @@ def onPerim(b, xv, yv, mag, ecf):
             if j != i and mag[j, i] <= ecf[i, j]:
                 nbrs[k] = j
                 k += 1
-#         nbrs = np.nonzero(coh_n[:,i])[0]
-#         print("Before agent {0}: {1}, {2}".format(i, nbrs, ang[:,i][nbrs]))
         nbr_sort(nbrs, ang, i)
-#         print("After agent {0}: {1}, {2}".format(i, nbrs, ang[:,i][nbrs]))
         for j in range(int(b[COH_N][i])):
             k = (j + 1) % int(b[COH_N][i])
-#             print("Checking for agent {} at nbrs {} and {}, {}".format(i, j, k, coh_n[nbrs[j]][nbrs[k]]))
-#             if not coh_n[nbrs[j]][nbrs[k]]:
             if mag[nbrs[k],nbrs[j]] > ecf[nbrs[j],nbrs[k]]: # nbrs[j] and nbrs[k] are not cohesion neighbours
                 result[i] = True
                 break
@@ -172,7 +183,6 @@ def onPerim(b, xv, yv, mag, ecf):
                 delta += np.pi * 2.0;
             if (delta > np.pi) or (b[PRM][i] and delta > 2.8):
                 result[i] = True;
-#                 print(i)
                 break;
     return result  
 
@@ -263,6 +273,7 @@ def d_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perimeter_directed=
     :param perimeter_packing_factor: determines the amount by which the repulsion field should be reduced for perimeter agents, 
                                      e.g. a perimeter_packing_factor of 0.5 causes the size of the repulsion field to be halved
     """
+    # print(scaling, exp_rate, speed, perimeter_directed, stability_factor, perimeter_packing_factor)
     n_agents = b.shape[1]
     ecf = np.broadcast_to(b[CF], (b[CF].shape[0], b[CF].shape[0]))
     xv = np.empty((n_agents, n_agents))

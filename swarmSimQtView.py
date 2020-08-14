@@ -2,21 +2,28 @@
 swarmSimQtView.py
 
 PyQt5-based animated display for swarm simulator.
-(1) The swarm moves, perimeter agents are shown red, inner agents black.
+The swarm moves, perimeter agents are shown red, inner agents black.
+
 It's interactive -
-(2) The display pane is scrollable and zoomable (scale-factor can be varied).
-(3) Animation can be paused/resumed and sped up/slowed down.
-(4) Moving the mouse within the display area prints model (ie, in swarm model
-coordinate system) position on the console (y-axis points up).
-(3) A mouse click anywhere in the display area causes swarm coordinates
-and perimeter status the be displayed on console. If the position pointed at
-is within cohesion range of 1 or more agent, the data for these are displayed;
-otherwise data for ALL agents displayed.
-(4) Axes are drawn crossing at model (0,0), with grid lines at 100-pixel intervals.
+  - The display pane is scrollable and zoomable (scale-factor can be varied).
+  - Animation can be paused/resumed and sped up/slowed down.
+  - Positioning the mouse within the display area displays position in the model coordinate
+      system (y-axis points up).
+  - A mouse click anywhere in the display area displays a step count on the console. 
+      Step count is incremented whenever the model steps, and is rest when a model is loaded.
+  - A mouse click anywhere in the display area while animation is paused also displays swarm
+      coordinates and perimeter status on console. If the position pointed at is within cohesion
+      range of 1 or more agents, data for these are displayed; otherwise data for ALL agents displayed.
+
+Axes are drawn crossing at model (0,0), with grid lines at 100-pixel intervals.
 With designed pane dimensions of of 2000x2000 px and scale factor of 50 this
 gives grid lines at intervals of 5 in swarm coords. Zoom is by factors of 2, 5
 alternately giving grid interval = 5x10^n or 10^n in logical (swarm) coordinates
 depending on zoom factor.
+
+The animation mechanism is that a timer tick OR a click on the Step button causes the model's
+d_step function to be invoked (with whatever kwargs have been chosen), then a repaint is scheduled.
+
 """
 from PyQt5.QtWidgets import QWidget, QApplication, QScrollArea, QPushButton,\
                     QLabel, QHBoxLayout, QVBoxLayout, QInputDialog, QLineEdit
@@ -32,6 +39,13 @@ pallette = [Qt.black, Qt.red, Qt.green, Qt.blue]
 ## Widget providing animated display - will go inside a scroll pane ##
 class Display(QWidget):
    ## Initialise UI, model, timer ##  
+
+  # Handle a timer tick by stepping the model and firing a repaint 
+  def tick(self):
+    mdl.d_step(self.dta, **self.kwargs)
+    self.update()
+    self.stepCt += 1
+   
   def __init__(self, data, kwargs, scf=100.0, intvl=64):
     super().__init__()
     self.initUI(2000, 2000)
@@ -42,8 +56,9 @@ class Display(QWidget):
     if not 'speed' in kwargs:
       kwargs['speed'] = 0.05
     self.timer = QTimer(self)
-    self.timer.timeout.connect(self.update) # QWidget.update() fires a paintEvent
+    self.timer.timeout.connect(self.tick) # QWidget.update() fires a paintEvent
     self.timer.setInterval(intvl)
+    self.stepCt = 0
     
   ## Initialise UI with preferred geometry, mouse tracking
   def initUI(self, width, height):    
@@ -62,6 +77,7 @@ class Display(QWidget):
   # If mouse clicked while animation paused, display data of agent(s) in range,
   # or all agents, if none in range
   def mousePressEvent(self, evt):
+    print("\n{:d} steps".format(self.stepCt))
     if self.timer.isActive():
       return
     # swarm coords pointed at: 
@@ -79,18 +95,13 @@ class Display(QWidget):
       print("x:", np.extract(inrange, self.dta[mdl.POS_X]).round(2))
       print("y:", np.extract(inrange, self.dta[mdl.POS_Y]).round(2))
       print("p:", np.extract(inrange, self.dta[mdl.PRM]))
+ 
+ 
 
-  '''
-  Model stepping options can be varied here by changing code in mdl.d_step(...).
-  By default, scaling='linear', exp_rate=0.2, with_perimeter=False,
-    perimeter_directed=False, stability_factor=0.0
-  Note that the perimeter is shown in a distinctive colour if EITHER of  
-    with_perimeter or perimeter_directed is TRUE.
-  '''
+  # Note that the perimeter is shown in a distinctive colour if perimeter_directed is TRUE.
   def paintEvent(self, event):
     width = int(self.size().width());     height = int(self.size().height())
     lh = self.dta.shape[1]
-    mdl.d_step(self.dta, **self.kwargs)
     clrs = np.where(self.dta[mdl.PRM],1,0) 
     qp = QPainter()
     qp.begin(self)
@@ -111,7 +122,7 @@ class Display(QWidget):
       gy = int((-self.dta[mdl.POS_Y,i]/self.scaleFact + 0.5)*height)
       qp.setPen(pallette[clrs[i]])
       qp.drawEllipse(gx-2, gy-2, 4, 4)   
-    qp.end()    
+    qp.end()
 ## 
 ## end of Display class
 
@@ -170,7 +181,7 @@ class Window(QWidget):
     hbox.addWidget(scrollArea)
     self.setLayout(hbox)
 
-    self.setGeometry(50, 50, 1200, 700) # Initally 1100x700 px with 50 px offsets
+    self.setGeometry(50, 50, 1200, 700) # Initally 1200x700 px with 50 px offsets
 
     self.rnpBtn.clicked.connect(self.stopStart) # Register handlers: 
     self.fstBtn.clicked.connect(self.faster)    #   - methods in Display instance
@@ -185,7 +196,9 @@ class Window(QWidget):
 
   ## Timer control methods
   def step(self):
+    mdl.d_step(self.dsp.dta, **self.kwargs)
     self.dsp.update()
+    self.dsp.stepCt += 1
 
   def faster(self):
     i = self.dsp.timer.interval()
@@ -247,7 +260,8 @@ class Window(QWidget):
     path, ok = QInputDialog.getText(self, "Load","Path:", QLineEdit.Normal, "")
     if ok and path != '':
       self.dsp.dta = mdl.loadState(path)
-      self.dsp.update() #repaint
+      self.dsp.update()    #repaint
+      self.dsp.stepCt = 0  #and reset step count
 ##
 ## End Window class
 
