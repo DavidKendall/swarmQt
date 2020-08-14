@@ -48,23 +48,22 @@ def mk_rand_swarm(n, *, cf=4.0, rf=3.0, kc=1.0, kr=1.0, kd=0.0, goal=0.0, loc=0.
     :param grid:   size of grid around b_0 in which all other agents will be placed initially at random
     '''
     b = np.empty((N_ROWS, n))                       #create a 2-D array, big enough for n agents
-#     b[POS_X:POS_Y + 1,:] = (np.random.uniform(size=2 * n) * 2 * grid - grid + loc).reshape(2, n) # place agents randomly
     prng = np.random.default_rng(seed)
-    b[POS_X:POS_Y + 1,:] = (prng.random(size=2 * n) * 2 * grid - grid + loc).reshape(2, n) # place agents randomly
+    np.copyto(b[POS_X:POS_Y + 1,:], (prng.random(size=2 * n) * 2 * grid - grid + loc).reshape(2, n)) # place agents randomly
     b[POS_X:POS_Y + 1,0] = loc                      # b_0 placed at [loc, loc]       
-    b[COH_X:COH_Y+1,:] = np.full((2,n), 0.0)        # cohesion vectors initially [0.0, 0.0]
-    b[REP_X:REP_Y+1,:] = np.full((2,n), 0.0)        # repulsion vectors initially [0.0, 0.0]
-    b[DIR_X:DIR_Y+1,:] = np.full((2,n), 0.0)        # direction vectors initially [0.0, 0.0]
-    b[RES_X:RES_Y + 1,:] = np.full((2,n), 0.0)      # resultant vectors initially [0.0, 0.0]
-    b[GOAL_X:GOAL_Y + 1,:] = np.full((2,n), goal)   # goal is at [goal, goal], default [0.0, 0.0]
-    b[CF,:] = np.full(n, cf)                        # cohesion field of all agents set to cf
-    b[RF,:] = np.full(n, rf)                        # repulsion field of all agents set to rf
-    b[KC,:] = np.full(n, kc)                        # cohesion weight for all agents set to kc
-    b[KR,:] = np.full(n, kr)                        # repulsion weight for all agents set to kr
-    b[KD,:] = np.full(n, kd)                        # direction weight for all agents set to kd
-    b[PRM,:] = np.full(n, False)                    # initially no agents known to be on perimeter
-    b[COH_N,:] = np.full(n, 0.0)                    # initially no cohesion neighbours
-    b[REP_N,:] = np.full(n, 0.0)                    # initially no repulsion neighbours
+    b[COH_X:COH_Y+1,:] = 0.                         # cohesion vectors initially [0.0, 0.0]
+    b[REP_X:REP_Y+1,:] = 0.                         # repulsion vectors initially [0.0, 0.0]
+    b[DIR_X:DIR_Y+1,:] = 0.                         # direction vectors initially [0.0, 0.0]
+    b[RES_X:RES_Y + 1,:] = 0.                       # resultant vectors initially [0.0, 0.0]
+    b[GOAL_X:GOAL_Y + 1,:] = goal                   # goal is at [goal, goal], default [0.0, 0.0]
+    b[CF,:] = cf                                    # cohesion field of all agents set to cf
+    b[RF,:] = rf                                    # repulsion field of all agents set to rf
+    b[KC,:] = kc                                    # cohesion weight for all agents set to kc
+    b[KR,:] = kr                                    # repulsion weight for all agents set to kr
+    b[KD,:] = kd                                    # direction weight for all agents set to kd
+    b[PRM,:] = False                                # initially no agents known to be on perimeter
+    b[COH_N,:] = 0.                                 # initially no cohesion neighbours
+    b[REP_N,:] = 0.                                 # initially no repulsion neighbours
     return b
 
 def mk_swarm(xs, ys, *, cf=4.0, rf=3.0, kc=1.0, kr=1.0, kd=0.0, goal=0.0):
@@ -83,30 +82,28 @@ def mk_swarm(xs, ys, *, cf=4.0, rf=3.0, kc=1.0, kr=1.0, kd=0.0, goal=0.0):
     n = len(xs)
     assert len(ys) == n
     b = np.empty((N_ROWS, n))                       # create a 2-D array, big enough for n agents
-    b[POS_X] = np.array(xs)                         # place agents as specified
-    b[POS_Y] = np.array(ys)                         # place agents as specified       
-    b[COH_X:COH_Y+1,:] = np.full((2,n), 0.0)        # cohesion vectors initially [0.0, 0.0]
-    b[REP_X:REP_Y+1,:] = np.full((2,n), 0.0)        # repulsion vectors initially [0.0, 0.0]
-    b[DIR_X:DIR_Y+1,:] = np.full((2,n), 0.0)        # direction vectors initially [0.0, 0.0]
-    b[RES_X:RES_Y + 1,:] = np.full((2,n), 0.0)      # resultant vectors initially [0.0, 0.0]
-    b[GOAL_X:GOAL_Y + 1,:] = np.full((2,n), goal)   # goal is at [goal, goal], default [0.0, 0.0]
-    b[CF,:] = np.full(n, cf)                        # cohesion field of all agents set to cf
-    b[RF,:] = np.full(n, rf)                        # repulsion field of all agents set to rf
-    b[KC,:] = np.full(n, kc)                        # cohesion weight for all agents set to kc
-    b[KR,:] = np.full(n, kr)                        # repulsion weight for all agents set to kr
-    b[KD,:] = np.full(n, kd)                        # direction weight for all agents set to kd
-    b[PRM,:] = np.full(n, False)                    # initially no agents known to be on perimeter
-    b[COH_N,:] = np.full(n, 0.0)                    # initially no cohesion neighbours
-    b[REP_N,:] = np.full(n, 0.0)                    # initially no repulsion neighbours
+    np.copyto(b[POS_X], xs)                         # place agents as specified
+    np.copyto(b[POS_Y], ys)                         # place agents as specified       
+    b[COH_X:COH_Y+1,:] = 0.                         # cohesion vectors initially [0.0, 0.0]
+    b[REP_X:REP_Y+1,:] = 0.                         # repulsion vectors initially [0.0, 0.0]
+    b[DIR_X:DIR_Y+1,:] = 0.                         # direction vectors initially [0.0, 0.0]
+    b[RES_X:RES_Y + 1,:] = 0.                       # resultant vectors initially [0.0, 0.0]
+    b[GOAL_X:GOAL_Y + 1,:] = goal                   # goal is at [goal, goal], default [0.0, 0.0]
+    b[CF,:] = cf                                    # cohesion field of all agents set to cf
+    b[RF,:] = rf                                    # repulsion field of all agents set to rf
+    b[KC,:] = kc                                    # cohesion weight for all agents set to kc
+    b[KR,:] = kr                                    # repulsion weight for all agents set to kr
+    b[KD,:] = kd                                    # direction weight for all agents set to kd
+    b[PRM,:] = False                                # initially no agents known to be on perimeter
+    b[COH_N,:] = 0.                                 # initially no cohesion neighbours
+    b[REP_N,:] = 0.                                 # initially no repulsion neighbours
     return b
-            
-@jit(nopython=True, fastmath=True, parallel=True)
-def all_pairs_mag(b):
+
+@jit(nopython=True, fastmath=True, parallel=True, cache=True)
+def all_pairs_mag(b, xv, yv, mag, ecf):
     n_agents = b.shape[1]
-    xv = np.empty((n_agents, n_agents))
-    yv = np.empty((n_agents, n_agents))
-    mag = np.empty((n_agents, n_agents))
-    for i in prange(n_agents):
+    b[COH_N].fill(0.)
+    for i in range(n_agents):
         for j in range(i):
             xv[i,j] = b[POS_X][i] - b[POS_X][j]
             xv[j,i] = -xv[i,j]
@@ -114,25 +111,26 @@ def all_pairs_mag(b):
             yv[j,i] = -yv[i,j]
             mag[i,j] = np.sqrt(xv[i,j] ** 2 + yv[i,j] ** 2)
             mag[j,i] = mag[i,j]
+            if mag[i,j] <= ecf[j,i]:
+                b[COH_N][i] = b[COH_N][i] + 1
+                b[COH_N][j] = b[COH_N][j] + 1
         xv[i,i] = 0.0
         yv[i,i] = 0.0
         mag[i,i] = 0.0
     return xv, yv, mag
 
-@jit(nopython=True, fastmath=True, parallel=True)
-def compute_coh(b, xv, yv, mag, ecf):
+@jit(nopython=True, fastmath=True, parallel=True, cache=True)
+def compute_coh(b, xv, yv, mag, ecf, ekc):
     n_agents = b.shape[1]
     for i in prange(n_agents):
-        b[COH_N][i] = 0.0
         b[COH_X][i] = 0.0
         b[COH_Y][i] = 0.0
         for j in range(n_agents):
             if j != i and mag[j, i] <= ecf[i, j]:
-                b[COH_N][i] = b[COH_N][i] + 1
-                b[COH_X][i] = b[COH_X][i] + xv[j,i]
-                b[COH_Y][i] = b[COH_Y][i] + yv[j,i] 
+                b[COH_X][i] = b[COH_X][i] + (xv[j,i] * ekc[j,i])
+                b[COH_Y][i] = b[COH_Y][i] + (yv[j,i] * ekc[j,i])
 
-@jit(nopython=True, fastmath=True)
+@jit(nopython=True, fastmath=True, cache=True)
 def nbr_sort(a, ang, i):
     n = a.shape[0]
     for j in range(n):
@@ -143,12 +141,12 @@ def nbr_sort(a, ang, i):
         if jmin != j:        
             a[jmin], a[j] = a[j], a[jmin]
                 
-@jit(nopython=True, parallel=True, fastmath=True)
+@jit(nopython=True, fastmath=True, parallel=True, cache=True)
 def onPerim(b, xv, yv, mag, ecf):
     n_agents = b.shape[1]
     result = np.full(n_agents, False)
     ang = np.arctan2(yv, xv)                    # all pairs polar angles
-    for i in range(n_agents):
+    for i in prange(n_agents):
         if b[COH_N][i] == 0:
             result[i] = True
             continue
@@ -172,29 +170,39 @@ def onPerim(b, xv, yv, mag, ecf):
             delta = ang[:,i][nbrs[k]] - ang[:,i][nbrs[j]]
             if (delta < 0):
                 delta += np.pi * 2.0;
-            if (delta > np.pi):
+            if (delta > np.pi) or (b[PRM][i] and delta > 2.8):
                 result[i] = True;
 #                 print(i)
                 break;
     return result  
 
-@jit(nopython=True, fastmath=True,parallel=True)
+@jit(nopython=True, fastmath=True, parallel=True, cache=True)
 def compute_erf(b, scale):
     n_agents = b.shape[1]
     erf = np.empty((n_agents, n_agents))
+    ekc = np.empty((n_agents, n_agents))
+    ekr = np.empty((n_agents, n_agents))
     for i in prange(n_agents):
         for j in range(i + 1):
             if b[PRM][i] and b[PRM][j]:
                 erf[i,j] = b[RF][i] * scale
                 erf[j,i] = b[RF][j] * scale
+                ekc[i,j] = b[KC][i] * (1. / scale)
+                ekc[j,i] = b[KC][j] * (1. / scale)
+                ekr[i,j] = b[KR][i] * scale
+                ekr[j,i] = b[KR][j] * scale
             else:
                 erf[i,j] = b[RF][i]
                 erf[j,i] = b[RF][j]
-    return erf
+                ekc[i,j] = b[KC][i]
+                ekc[j,i] = b[KC][j]
+                ekr[i,j] = b[KR][i]
+                ekr[j,i] = b[KR][j]
+    return erf, ekc, ekr
 
 
-@jit(nopython=True, fastmath=True,parallel=True)
-def compute_rep_linear(b, xv, yv, mag, erf):
+@jit(nopython=True, fastmath=True, parallel=True, cache=True)
+def compute_rep_linear(b, xv, yv, mag, erf, ekr):
     n_agents = b.shape[1]
     for i in prange(n_agents):
         b[REP_N][i] = 0.0
@@ -203,36 +211,36 @@ def compute_rep_linear(b, xv, yv, mag, erf):
         for j in range(n_agents):
             if j != i and mag[j, i] <= erf[i,j]:
                 b[REP_N][i] = b[REP_N][i] + 1
-                b[REP_X][i] = b[REP_X][i] + ((mag[j,i] - erf[i,j]) * (xv[j,i] / mag[j,i]))
-                b[REP_Y][i] = b[REP_Y][i] + ((mag[j,i] - erf[i,j]) * (yv[j,i] / mag[j,i]))
-
-@jit(nopython=True, fastmath=True,parallel=True)
-def compute_rep_quadratic(b, xv, yv, mag, erf):
-    n_agents = b.shape[1]
-    for i in prange(n_agents):
-        b[REP_N][i] = 0.0
-        b[REP_X][i] = 0.0
-        b[REP_Y][i] = 0.0
-        for j in range(n_agents):
-            if j != i and mag[j, i] <= erf[i,j]:
-                b[REP_N][i] = b[REP_N][i] + 1
-                b[REP_X][i] = b[REP_X][i] + (-erf[i,j] * (mag[j,i] ** -2) * (xv[j,i] / mag[j,i]))
-                b[REP_Y][i] = b[REP_Y][i] + (-erf[i,j] * (mag[j,i] ** -2) * (yv[j,i] / mag[j,i]))
-
-@jit(nopython=True, fastmath=True, parallel=True)
-def compute_rep_exponential(b, xv, yv, mag, erf, exp_rate):
-    n_agents = b.shape[1]
-    for i in prange(n_agents):
-        b[REP_N][i] = 0.0
-        b[REP_X][i] = 0.0
-        b[REP_Y][i] = 0.0
-        for j in range(n_agents):
-            if j != i and mag[j, i] <= erf[i,j]:
-                b[REP_N][i] = b[REP_N][i] + 1
-                b[REP_X][i] = b[REP_X][i] + (-erf[i,j] * (np.e ** (-mag[j,i] * exp_rate)) * (xv[j,i] / mag[j,i]))
-                b[REP_Y][i] = b[REP_Y][i] + (-erf[i,j] * (np.e ** (-mag[j,i] * exp_rate)) * (yv[j,i] / mag[j,i]))
+                b[REP_X][i] = b[REP_X][i] + ((mag[j,i] - erf[i,j]) * (xv[j,i] / mag[j,i]) * ekr[j,i])
+                b[REP_Y][i] = b[REP_Y][i] + ((mag[j,i] - erf[i,j]) * (yv[j,i] / mag[j,i]) * ekr[j,i])
 
 @jit(nopython=True, fastmath=True)
+def compute_rep_quadratic(b, xv, yv, mag, erf, ekr):
+    n_agents = b.shape[1]
+    for i in range(n_agents):
+        b[REP_N][i] = 0.0
+        b[REP_X][i] = 0.0
+        b[REP_Y][i] = 0.0
+        for j in range(n_agents):
+            if j != i and mag[j, i] <= erf[i,j]:
+                b[REP_N][i] = b[REP_N][i] + 1
+                b[REP_X][i] = b[REP_X][i] + (-erf[i,j] * (mag[j,i] ** -2) * (xv[j,i] / mag[j,i]) * ekr[j,i])
+                b[REP_Y][i] = b[REP_Y][i] + (-erf[i,j] * (mag[j,i] ** -2) * (yv[j,i] / mag[j,i]) * ekr[j,i])
+
+@jit(nopython=True, fastmath=True)
+def compute_rep_exponential(b, xv, yv, mag, erf, ekr, exp_rate):
+    n_agents = b.shape[1]
+    for i in range(n_agents):
+        b[REP_N][i] = 0.0
+        b[REP_X][i] = 0.0
+        b[REP_Y][i] = 0.0
+        for j in range(n_agents):
+            if j != i and mag[j, i] <= erf[i,j]:
+                b[REP_N][i] = b[REP_N][i] + 1
+                b[REP_X][i] = b[REP_X][i] + (-erf[i,j] * (np.e ** (-mag[j,i] * exp_rate)) * (xv[j,i] / mag[j,i]) * ekr[j,i])
+                b[REP_Y][i] = b[REP_Y][i] + (-erf[i,j] * (np.e ** (-mag[j,i] * exp_rate)) * (yv[j,i] / mag[j,i]) * ekr[j,i])
+
+@jit(nopython=True, fastmath=True, cache=True)
 def update_resultant(b, stability_factor, speed):
     n_agents = b.shape[1]
     for i in range(n_agents):
@@ -243,7 +251,7 @@ def update_resultant(b, stability_factor, speed):
         else:
             b[RES_X][i] = 0.0
             b[RES_Y][i] = 0.0
-            
+             
 def d_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perimeter_directed=False, stability_factor=0.0, perimeter_packing_factor=1.0):
     """
     Compute one step in the evolution of swarm `b`
@@ -255,41 +263,42 @@ def d_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perimeter_directed=
     :param perimeter_packing_factor: determines the amount by which the repulsion field should be reduced for perimeter agents, 
                                      e.g. a perimeter_packing_factor of 0.5 causes the size of the repulsion field to be halved
     """
-    xv, yv, mag = all_pairs_mag(b)
-    
-    # compute the cohesion vectors 
+    n_agents = b.shape[1]
     ecf = np.broadcast_to(b[CF], (b[CF].shape[0], b[CF].shape[0]))
-    compute_coh(b, xv, yv, mag, ecf)
-    b[COH_X:COH_Y+1] /= np.maximum(b[COH_N], 1)         # divide by the number of cohesion neighbours
+    xv = np.empty((n_agents, n_agents))
+    yv = np.empty((n_agents, n_agents))
+    mag = np.empty((n_agents, n_agents))
+    all_pairs_mag(b, xv, yv, mag, ecf)
 
     # compute the perimeter
     b[PRM] = onPerim(b, xv, yv, mag, ecf)
 
-    # compute the effective repulsion field
-    if perimeter_packing_factor < 1.0:
-        erf = compute_erf(b, perimeter_packing_factor)
-    else:
-        erf = np.broadcast_to(b[RF], (b[RF].shape[0], b[RF].shape[0]))   # no repulsion field reduction required
+   # compute the effective repulsion field, cohesion weight and repulsion weight
+    erf, ekc, ekr = compute_erf(b, perimeter_packing_factor)
     
-    # compute the repulsion vectors
+    # compute the cohesion vectors 
+    compute_coh(b, xv, yv, mag, ecf, ekc)
+    b[COH_X:COH_Y+1] /= np.maximum(b[COH_N], 1)         # divide by the number of cohesion neighbours
+
+     # compute the repulsion vectors
     if scaling == 'linear':
-        compute_rep_linear(b, xv, yv, mag, erf)
+        compute_rep_linear(b, xv, yv, mag, erf, ekr)
     elif scaling == 'quadratic':
-        compute_rep_quadratic(b, xv, yv, mag, erf)
+        compute_rep_quadratic(b, xv, yv, mag, erf, ekr)
     elif scaling == 'exponential':
-        compute_rep_exponential(b, xv, yv, mag, erf, exp_rate)
+        compute_rep_exponential(b, xv, yv, mag, erf, ekr, exp_rate)
     else:
         assert(False)                                   # something's gone wrong here
     b[REP_X:REP_Y+1] /= np.maximum(b[REP_N], 1)         # divide by the number of repulsion neighbours
     
     # compute the direction vectors
-    b[DIR_X:DIR_Y+1] = b[GOAL_X:GOAL_Y+1] - b[POS_X:POS_Y+1]
+    b[DIR_X:DIR_Y+1] = b[KD] * (b[GOAL_X:GOAL_Y+1] - b[POS_X:POS_Y+1])
 
     # compute the resultant of the cohesion, repulsion and direction vectors
     if perimeter_directed:
-        b[RES_X:RES_Y+1] = b[KC] * b[COH_X:COH_Y+1] + b[KR] * b[REP_X:REP_Y+1] + b[PRM] * b[KD] * b[DIR_X:DIR_Y+1]
+        b[RES_X:RES_Y+1] = b[COH_X:COH_Y+1] + b[REP_X:REP_Y+1] + b[PRM] * b[DIR_X:DIR_Y+1]
     else:
-        b[RES_X:RES_Y+1] = b[KC] * b[COH_X:COH_Y+1] + b[KR] * b[REP_X:REP_Y+1] + b[KD] * b[DIR_X:DIR_Y+1]
+        b[RES_X:RES_Y+1] = b[COH_X:COH_Y+1] + b[REP_X:REP_Y+1] + b[DIR_X:DIR_Y+1]
                   
     # normalise the resultant and update for speed, adjusted for stability    
     update_resultant(b, stability_factor, speed)
@@ -297,7 +306,7 @@ def d_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perimeter_directed=
     # update positions
     b[POS_X:POS_Y+1] += b[RES_X:RES_Y+1]            
     
-    return xv, yv, mag, erf                         # helpful in the calculation of metrics and for debugging
+    return xv, yv, mag, erf, ekc, ekr                         # helpful in the calculation of metrics and for debugging
 
 def mu_sigma_d(mag, coh_n):
     """

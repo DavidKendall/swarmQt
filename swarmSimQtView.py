@@ -189,7 +189,7 @@ class Window(QWidget):
 
   def faster(self):
     i = self.dsp.timer.interval()
-    if i > 64:
+    if i > 16:
       i //= 2
       self.dsp.timer.setInterval(i)
       self.tmrLbl.setText("{:d}".format(self.dsp.timer.interval()))
@@ -258,15 +258,15 @@ Run the QtView
 def runQtView(args):
   swarm_args = {k:v for k,v in args.items() if k in ['random', 'load_state', 'read_coords', 'cf', 'rf', 'kc', 'kr', 'kd', 'goal', 'loc', 'grid', 'seed'] and v is not None}
   step_args = {k:v for k,v in args.items() if k in ['scaling', 'exp_rate', 'speed', 'perimeter_directed', 'stability_factor', 'perimeter_packing_factor'] and v is not None} 
-  if swarm_args['random'] is not None:
-      n = swarm_args['random']
-      del swarm_args['random']
-      b = mdl.mk_rand_swarm(n, **swarm_args)
-  elif swarm_args['read_coords'] is not None:
-      xs, ys = mdl.readCoords(swarm_args['read_coords'])
-      del swarm_args['read_coords']
-      b = mdl.mk_swarm(xs, ys, **swarm_args)
-  elif swarm_args['load_state'] is not None:
+  if 'random' in swarm_args.keys():
+    n = swarm_args['random']
+    del swarm_args['random']
+    b = mdl.mk_rand_swarm(n, **swarm_args)
+  elif 'read_coords' in swarm_args.keys():
+    xs, ys = mdl.readCoords(swarm_args['read_coords'])
+    del swarm_args['read_coords']
+    b = mdl.mk_swarm(xs, ys, **swarm_args)
+  elif 'load_state' in swarm_args.keys():
     b = mdl.loadState(swarm_args['load_state'])
   else:
     print("Error in swarm creation")
