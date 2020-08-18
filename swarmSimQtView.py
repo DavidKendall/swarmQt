@@ -7,13 +7,18 @@ The swarm moves, perimeter agents are shown red, inner agents black.
 It's interactive -
   - The display pane is scrollable and zoomable (scale-factor can be varied).
   - Animation can be paused/resumed and sped up/slowed down.
+  - A step count is displayed on the GUI.
+      This is incremented whenever the model steps, and is reset when a model is loaded.
   - Positioning the mouse within the display area displays position in the model coordinate
       system (y-axis points up).
-  - A mouse click anywhere in the display area displays a step count on the console. 
-      Step count is incremented whenever the model steps, and is rest when a model is loaded.
-  - A mouse click anywhere in the display area while animation is paused also displays swarm
-      coordinates and perimeter status on console. If the position pointed at is within cohesion
-      range of 1 or more agents, data for these are displayed; otherwise data for ALL agents displayed.
+  - A mouse click in the display area within 5 px of an agent while animation is paused displays
+      swarm coords and perimeter status (of all agents with range) in a scrollable information window.
+      If no agents are with range, a message to this effect is displayed.
+      
+  - The information window may be hidden/shown/cleared. If it is visible, it must be hidden or closed before
+    the app will exit. The 'Quit' button closes both windows and exits.
+    
+  - The information window is editable: text may be copied/cut/pasted/deleted/edited.
 
 Axes are drawn crossing at model (0,0), with grid lines at 100-pixel intervals.
 With designed pane dimensions of of 2000x2000 px and scale factor of 50 this
@@ -25,10 +30,11 @@ The animation mechanism is that a timer tick OR a click on the Step button cause
 d_step function to be invoked (with whatever kwargs have been chosen), then a repaint is scheduled.
 
 """
-from PyQt5.QtWidgets import QWidget, QApplication, QScrollArea, QPushButton,\
-                    QLabel, QHBoxLayout, QVBoxLayout, QInputDialog, QLineEdit
+from PyQt5.QtWidgets import QWidget, QApplication, QScrollArea, QPushButton, QMainWindow,\
+           QLabel, QHBoxLayout, QVBoxLayout, QFormLayout, QInputDialog, QLineEdit, QPlainTextEdit
 from PyQt5.QtGui import QPainter, QColor, QCursor
 from PyQt5.QtCore import Qt, QTimer
+from PyQt5 import QtCore
 import swarmSimModel as mdl
 import numpy as np
 import sys
@@ -36,37 +42,43 @@ import argparse
 
 pallette = [Qt.black, Qt.red, Qt.green, Qt.blue]
 
-## Widget providing animated display - will go inside a scroll pane ##
+"""
+Widget providing animated display - will go inside a scroll pane
+Also contains working code and data for animating the display.
+"""
 class Display(QWidget):
    ## Initialise UI, model, timer ##  
 
-  # Handle a timer tick by stepping the model and firing a repaint 
-  def tick(self):
-    mdl.d_step(self.dta, **self.kwargs)
-    self.update()
-    self.stepCt += 1
-   
-  def __init__(self, data, kwargs, scf=100.0, intvl=64):
+  def __init__(self, data, kwargs, scf=100.0):
     super().__init__()
-    self.initUI(2000, 2000)
+    #self.initUI(2000, 2000)
     self.dta = data
     self.scaleFact = scf
     self.scaleMultplr = 2 # alt 2, 5
+    self.stepCt = 0
+    self.running = False
     self.kwargs = kwargs
+    self.xv = None;  self.yv = None; self.mag = None; self.ang = None;
+    self.ecf = None; self.erf = None
     if not 'speed' in kwargs:
       kwargs['speed'] = 0.05
-    self.timer = QTimer(self)
-    self.timer.timeout.connect(self.tick) # QWidget.update() fires a paintEvent
-    self.timer.setInterval(intvl)
-    self.stepCt = 0
+ 
+    # Initialise model on basis of initial data      
+    self.xv, self.yv, self.mag, self.ang, self.ecf, self.erf, _, _ = mdl.compute_step(self.dta, **self.kwargs)
+    self.infoDsp = InfoDisplay()
     
-  ## Initialise UI with preferred geometry, mouse tracking
-  def initUI(self, width, height):    
-    self.setGeometry(50, 50, width, height)
+    self.setGeometry(50, 50, 2000, 2000)
     self.setWindowTitle('Swarm Display')
     self.setMouseTracking(True)
     self.setCursor(QCursor(Qt.CrossCursor))
     self.show()
+
+  # Step the model
+  def step(self):
+    mdl.apply_step(self.dta) # update positions from prevous step computation and do next  one ...
+    self.xv, self.yv, self.mag, self.ang, self.ecf, self.erf, _, _ = mdl.compute_step(self.dta, **self.kwargs)
+    self.update()
+    self.stepCt += 1
 
   # Display position pointed at my mouse, in swarm coordinates
   def mouseMoveEvent(self, event):
@@ -74,30 +86,46 @@ class Display(QWidget):
     ay = -(event.y()/self. size().height() - 0.5) * self.scaleFact    
     print("({0:.2f},{1:.2f})  ".format(ax,ay), end="\r")
 
+  #Helper to following function: Assemble information string about an agent
+  def infoMsg(self, agt):
+    msg = "\nAgent {:d} at ({:.2f},{:.2f})".format(agt, self.dta[mdl.POS_X,agt], self.dta[mdl.POS_Y,agt])
+    if self.dta[mdl.PRM, agt]:
+      msg += " (on perim)"
+    if self.mag is not None: # once d_step has run, xv, yv, mag are all non-null
+      msg += "\n{:d} neighbours".format(int(self.dta[mdl.COH_N,agt]))
+      if self.dta[mdl.COH_N,agt] > 0:
+        msg += ":"
+        for j in range(self.dta.shape[1]):
+          if self.mag[agt,j] <= self.ecf[agt,j] and agt != j:
+            msg += " {:d}:{:.3f}\u221f{:.1f};".format(j, self.mag[agt,j], self.ang[j,agt]*180/np.pi)
+      msg += "\n{:d} repellors".format(int(self.dta[mdl.REP_N,agt]))     
+      if self.dta[mdl.REP_N,agt] > 0:
+        msg += ":"
+        for j in range(self.dta.shape[1]):
+          if self.mag[agt,j] <= self.erf[agt,j] and agt != j:
+            msg += " {:d}:{:.3f}\u221f{:.1f};".format(j, self.mag[agt,j], self.ang[j,agt]*180/np.pi)
+      msg += "\n"
+    return msg
+
   # If mouse clicked while animation paused, display data of agent(s) in range,
   # or all agents, if none in range
   def mousePressEvent(self, evt):
-    print("\n{:d} steps".format(self.stepCt))
-    if self.timer.isActive():
+    if self.running:
       return
-    # swarm coords pointed at: 
-    ax = (evt.x()/self.size().width() - 0.5) * self.scaleFact    
-    ay = -(evt.y()/self. size().height() - 0.5) * self.scaleFact 
-    # agents within range:
-    inrange = np.hypot(self.dta[mdl.POS_X]-ax, self.dta[mdl.POS_Y]-ay) < self.dta[mdl.CF]
-    if np.count_nonzero(inrange) == 0:
-      print("All agents:    ")
-      print("x:", self.dta[mdl.POS_X].round(2))
-      print("y:", self.dta[mdl.POS_Y].round(2))
-      print("p:", self.dta[mdl.PRM])
+    # agents pointed at (within 5 px):
+    inrange = np.hypot(((self.dta[mdl.POS_X]/self.scaleFact + 0.5)*self.size().width() - evt.x()), 
+                      ((-self.dta[mdl.POS_Y]/self.scaleFact + 0.5)*self.size().height()) - evt.y()) < 5 
+    selection =  np.where(inrange)[0]
+    if len(selection) == 0:
+      message = "\n{:d} steps:\nNo agents in range".format(self.stepCt)
     else:
-      print("Agents near ({0:.2f},{1:.2f}):".format(ax,ay))
-      print("x:", np.extract(inrange, self.dta[mdl.POS_X]).round(2))
-      print("y:", np.extract(inrange, self.dta[mdl.POS_Y]).round(2))
-      print("p:", np.extract(inrange, self.dta[mdl.PRM]))
- 
- 
+      message = "\n{:d} steps:".format(self.stepCt)
+      for i in selection:
+        message += self.infoMsg(i)
 
+    self.infoDsp.tArea.appendPlainText(message)
+    self.infoDsp.show()
+ 
   # Note that the perimeter is shown in a distinctive colour if perimeter_directed is TRUE.
   def paintEvent(self, event):
     width = int(self.size().width());     height = int(self.size().height())
@@ -126,16 +154,59 @@ class Display(QWidget):
 ## 
 ## end of Display class
 
-## 'Main window': contains timer control buttons in a panel sitting
-##   to left of a scroll pane containing a Display instance.  ###########
+"""
+Window to display information about agent(s) clicked upon.
+Some pretty bizarre code to improvise a resize event:  Qt5 does not seem to provide a natural way of doing this.
+"""
+class InfoDisplay(QMainWindow):
+  resized = QtCore.pyqtSignal()
+
+  def __init__(self, parent=None):
+    super(InfoDisplay, self).__init__(parent=parent)
+    
+    self.setWindowTitle("Information Display")
+    self.resize(1200, 700)
+    self.centralwidget = QWidget(self)
+    self.centralwidget.setObjectName("centralwidget")
+    self.setCentralWidget(self.centralwidget)
+    QtCore.QMetaObject.connectSlotsByName(self)
+    self.resized.connect(self.rszHndlr)
+
+    layout = QFormLayout()
+    self.tArea = QPlainTextEdit(self)
+    #self.tArea.setReadOnly(True)
+    self.tArea.setLineWrapMode(QPlainTextEdit.WidgetWidth)
+    layout.addWidget(self.tArea)
+    
+    self.tArea.resize(self.width()-1, self.height()-1)
+    
+  def resizeEvent(self, event):
+    self.resized.emit()
+    return super(InfoDisplay, self).resizeEvent(event)
+
+  def rszHndlr(self):
+    #print("resize ({:d} x {:d})".format(event.size().width(), event.size().height()))
+    self.tArea.resize(self.width()-1, self.height()-1)
+## end of InfoDisplay class
+
+
+"""
+'Main window': contains animation timer and control buttons in a panel sitting  to left of
+ a scroll pane containing a Display instance.
+"""
 class Window(QWidget):
   def __init__(self, data, kwargs):
     super().__init__()
-    self.kwargs = kwargs
     self.initUI(data, kwargs)
-
-  def initUI(self, data, kwargs):
+   
+  def initUI(self, data, kwargs, intvl=64):
+    self.timer = QTimer(self)
+    self.timer.timeout.connect(self.tick) # QWidget.update() fires a paintEvent
+    self.timer.setInterval(intvl)
+ 
     self.dsp = Display(data, kwargs)  ## make a Display instance
+    
+    self.stpLbl = QLabel("{:d}".format(self.dsp.stepCt))
     self.stpBtn = QPushButton("Step")
     self.rnpBtn = QPushButton("Run")
     self.fstBtn = QPushButton("Faster")
@@ -143,11 +214,15 @@ class Window(QWidget):
     self.lngBtn = QPushButton("Longer step")
     self.shtBtn = QPushButton("Shorter step")
     self.outBtn = QPushButton("Zoom out")
-    self.zInBtn = QPushButton("Zoom in")  
-    self.dmpBtn = QPushButton("Dump")  
-    self.loadBtn = QPushButton("Load")  
+    self.zInBtn = QPushButton("Zoom in")
+    self.dmpBtn = QPushButton("Dump")
+    self.loadBtn = QPushButton("Load")
+    self.clrBtn =  QPushButton("Clear Info") 
+    self.hideBtn =  QPushButton("Hide Info") 
+    self.showBtn =  QPushButton("Show Info") 
+    self.quitBtn =  QPushButton("Quit") 
 
-    self.tmrLbl = QLabel("{:d}".format(self.dsp.timer.interval()))
+    self.tmrLbl = QLabel("{:d}".format(self.timer.interval()))
     self.tmrLbl.setAlignment(Qt.AlignCenter)
     self.scfLbl = QLabel("{:.1f}".format(self.dsp.scaleFact))
     self.scfLbl.setAlignment(Qt.AlignCenter)
@@ -156,6 +231,7 @@ class Window(QWidget):
 
     vbox = QVBoxLayout()           ## these buttons laid out vertically,
     vbox.addStretch(1)             ## centred by means of a stretch at each end
+    vbox.addWidget(self.stpLbl)
     vbox.addWidget(self.stpBtn)
     vbox.addWidget(self.rnpBtn)
     vbox.addWidget(self.fstBtn)
@@ -169,10 +245,14 @@ class Window(QWidget):
     vbox.addWidget(self.zInBtn)
     vbox.addWidget(self.dmpBtn)
     vbox.addWidget(self.loadBtn)
+    vbox.addWidget(self.clrBtn)
+    vbox.addWidget(self.hideBtn)
+    vbox.addWidget(self.showBtn)
+    vbox.addWidget(self.quitBtn)
     vbox.addStretch(1)
     
-    scrollArea = QScrollArea()        ## and a scroll pane;
-    scrollArea.setWidget(self.dsp)    ## put the former in the latter 
+    scrollArea = QScrollArea()        ## a scroll pane for the graphical display;
+    scrollArea.setWidget(self.dsp)    ## put the display in the scroll pane 
     scrollArea.horizontalScrollBar().setValue(500);
     scrollArea.verticalScrollBar().setValue(600);
 
@@ -193,33 +273,43 @@ class Window(QWidget):
     self.zInBtn.clicked.connect(self.zoomIn)
     self.dmpBtn.clicked.connect(self.saveState)
     self.loadBtn.clicked.connect(self.loadState)
+    self.clrBtn.clicked.connect(self.clearInfo)
+    self.hideBtn.clicked.connect(self.hideInfo)
+    self.showBtn.clicked.connect(self.showInfo)
+    self.quitBtn.clicked.connect(self.quit)
 
+  # Handle a timer tick by stepping the model and firing a repaint 
+  def tick(self):
+    self.dsp.step()
+    self.stpLbl.setText("{:d}".format(self.dsp.stepCt))
+    
   ## Timer control methods
   def step(self):
-    mdl.d_step(self.dsp.dta, **self.kwargs)
-    self.dsp.update()
-    self.dsp.stepCt += 1
+    self.dsp.step()
+    self.stpLbl.setText("{:d}".format(self.dsp.stepCt))
 
   def faster(self):
-    i = self.dsp.timer.interval()
+    i = self.timer.interval()
     if i > 16:
       i //= 2
-      self.dsp.timer.setInterval(i)
-      self.tmrLbl.setText("{:d}".format(self.dsp.timer.interval()))
+      self.timer.setInterval(i)
+      self.tmrLbl.setText("{:d}".format(self.timer.interval()))
 
   def slower(self):
-    i = self.dsp.timer.interval()
+    i = self.timer.interval()
     if i < 1024:
       i *= 2
-      self.dsp.timer.setInterval(i)
-      self.tmrLbl.setText("{:d}".format(self.dsp.timer.interval()))
+      self.timer.setInterval(i)
+      self.tmrLbl.setText("{:d}".format(self.timer.interval()))
 
   def stopStart(self):
-    if self.dsp.timer.isActive():
-      self.dsp.timer.stop()
+    if self.timer.isActive():
+      self.timer.stop()
+      self.dsp.running = False
       self.rnpBtn.setText("Run")
     else:
-      self.dsp.timer.start()
+      self.timer.start()
+      self.dsp.running = True
       self.rnpBtn.setText("Pause")
 
   def longerStep(self):
@@ -262,7 +352,20 @@ class Window(QWidget):
       self.dsp.dta = mdl.loadState(path)
       self.dsp.update()    #repaint
       self.dsp.stepCt = 0  #and reset step count
-##
+
+  def clearInfo(self):
+    self.dsp.infoDsp.tArea.setPlainText("");
+
+  def hideInfo(self):
+    self.dsp.infoDsp.hide()
+
+  def showInfo(self):
+    self.dsp.infoDsp.show()
+
+  def quit(self):
+   self.dsp.infoDsp.close()
+   self.close()
+
 ## End Window class
 
 '''

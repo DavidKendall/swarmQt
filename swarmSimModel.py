@@ -170,7 +170,7 @@ def onPerim(b, xv, yv, mag, ecf):
         nbr_sort(nbrs, ang, i)
         for j in range(int(b[COH_N][i])):
             k = (j + 1) % int(b[COH_N][i])
-            if mag[nbrs[k],nbrs[j]] > ecf[nbrs[j],nbrs[k]]: # nbrs[j] and nbrs[k] are not cohesion neighbours
+            if mag[nbrs[k],nbrs[j]] > ecf[nbrs[j],nbrs[k]]: # nbrs[j], nbrs[k] are not cohesion neighbours
                 result[i] = True
                 break
             delta = ang[:,i][nbrs[k]] - ang[:,i][nbrs[j]]
@@ -179,7 +179,7 @@ def onPerim(b, xv, yv, mag, ecf):
             if (delta > np.pi) or (b[PRM][i] and delta > 2.8):
                 result[i] = True;
                 break;
-    return result  
+    return result, ang
 
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
 def compute_erf(b, scale):
@@ -257,9 +257,9 @@ def update_resultant(b, stability_factor, speed):
             b[RES_X][i] = 0.0
             b[RES_Y][i] = 0.0
              
-def d_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perimeter_directed=False, stability_factor=0.0, perimeter_packing_factor=1.0):
+def compute_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perimeter_directed=False, stability_factor=0.0, perimeter_packing_factor=1.0):
     """
-    Compute one step in the evolution of swarm `b`
+    Compute one step in the evolution of swarm `b`, update the COH, REP, DIR and RES fields
     :param b: the array modelling the state of the swarm
     :param scaling: choose 'linear', 'quadratic', or 'exponential' scaling of repulsion vectors
     :param exp_rate: rate of scaling in 'exponential' case
@@ -277,7 +277,7 @@ def d_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perimeter_directed=
     all_pairs_mag(b, xv, yv, mag, ecf)
 
     # compute the perimeter
-    b[PRM] = onPerim(b, xv, yv, mag, ecf)
+    b[PRM], ang = onPerim(b, xv, yv, mag, ecf)
 
    # compute the effective repulsion field, cohesion weight and repulsion weight
     erf, ekc, ekr = compute_erf(b, perimeter_packing_factor)
@@ -308,11 +308,14 @@ def d_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perimeter_directed=
                   
     # normalise the resultant and update for speed, adjusted for stability    
     update_resultant(b, stability_factor, speed)
+    return xv, yv, mag, ang, ecf, erf, ekc, ekr  # helpful in calculation of metrics, instrumentation, debugging
 
-    # update positions
+def apply_step(b):
+    """
+    Assuming the step has been computed so that RES fields are up to date, update positions
+    """
     b[POS_X:POS_Y+1] += b[RES_X:RES_Y+1]            
-    
-    return xv, yv, mag, erf, ekc, ekr                         # helpful in the calculation of metrics and for debugging
+
 
 def mu_sigma_d(mag, coh_n):
     """
