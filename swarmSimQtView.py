@@ -12,8 +12,10 @@ It's interactive -
   - Positioning the mouse within the display area displays position in the model coordinate
       system (y-axis points up).
   - A mouse click in the display area within 5 px of an agent while animation is paused displays
-      swarm coords and perimeter status (of all agents with range) in a scrollable information window.
-      If no agents are with range, a message to this effect is displayed.
+      swarm coords and perimeter status (of all agents within range) in a scrollable information window.
+      If no agents are within range, a message to this effect is displayed.
+      Also displays COH, REP circles of agents on main display; any previous displayed circles are reteined
+      if SHIFT-clicked.
       
   - The information window may be hidden/shown/cleared. If it is visible, it must be hidden or closed before
     the app will exit. The 'Quit' button closes both windows and exits.
@@ -40,7 +42,7 @@ import numpy as np
 import sys
 import argparse
 
-pallette = [Qt.black, Qt.red, Qt.green, Qt.blue]
+pallette = [Qt.black, Qt.red, Qt.darkGreen, Qt.blue, Qt.magenta, Qt.cyan, Qt.yellow]
 
 """
 Widget providing animated display - will go inside a scroll pane
@@ -65,18 +67,22 @@ class Display(QWidget):
  
     # Initialise model on basis of initial data      
     self.xv, self.yv, self.mag, self.ang, self.ecf, self.erf, _, _ = mdl.compute_step(self.dta, **self.kwargs)
+    self.agtClrs = np.where(self.dta[mdl.PRM],1,0) 
     self.infoDsp = InfoDisplay()
     
     self.setGeometry(50, 50, 2000, 2000)
     self.setWindowTitle('Swarm Display')
     self.setMouseTracking(True)
     self.setCursor(QCursor(Qt.CrossCursor))
+    self.showCircles = []
     self.show()
 
   # Step the model
   def step(self):
     mdl.apply_step(self.dta) # update positions from prevous step computation and do next  one ...
     self.xv, self.yv, self.mag, self.ang, self.ecf, self.erf, _, _ = mdl.compute_step(self.dta, **self.kwargs)
+    self.agtClrs = np.where(self.dta[mdl.PRM],1,0) 
+    self.showCircles = []
     self.update()
     self.stepCt += 1
 
@@ -86,7 +92,8 @@ class Display(QWidget):
     ay = -(event.y()/self. size().height() - 0.5) * self.scaleFact    
     print("({0:.2f},{1:.2f})  ".format(ax,ay), end="\r")
 
-  #Helper to following function: Assemble information string about an agent
+  #Helper to following function: Assemble information string about an agent;
+  #update display colour of neighbouring agents
   def infoMsg(self, agt):
     msg = "\nAgent {:d} at ({:.2f},{:.2f})".format(agt, self.dta[mdl.POS_X,agt], self.dta[mdl.POS_Y,agt])
     if self.dta[mdl.PRM, agt]:
@@ -107,22 +114,28 @@ class Display(QWidget):
       msg += "\n"
     return msg
 
-  # If mouse clicked while animation paused, display data of agent(s) in range,
-  # or all agents, if none in range
+  # If mouse clicked while animation paused, display data of agent(s) within 5 px of click; display COH,
+  # REP circle(s) of selected agent(s). If SHIFT-click, circles of previously sel'd agents are retained.
   def mousePressEvent(self, evt):
     if self.running:
       return
-    # agents pointed at (within 5 px):
+    # find agents pointed at (within 5 px):
     inrange = np.hypot(((self.dta[mdl.POS_X]/self.scaleFact + 0.5)*self.size().width() - evt.x()), 
-                      ((-self.dta[mdl.POS_Y]/self.scaleFact + 0.5)*self.size().height()) - evt.y()) < 5 
-    selection =  np.where(inrange)[0]
-    if len(selection) == 0:
+                      (-self.dta[mdl.POS_Y]/self.scaleFact + 0.5)*self.size().height() - evt.y()) < 5 
+
+    mods = QApplication.keyboardModifiers()
+    if not mods == Qt.ShiftModifier:
+      self.showCircles = []
+    self.showCircles.extend(np.where(inrange)[0])
+    if len(self.showCircles) == 0:
       message = "\n{:d} steps:\nNo agents in range".format(self.stepCt)
     else:
       message = "\n{:d} steps:".format(self.stepCt)
-      for i in selection:
+      for i in self.showCircles:
         message += self.infoMsg(i)
+      self.update()
 
+    self.update()
     self.infoDsp.tArea.appendPlainText(message)
     self.infoDsp.show()
  
@@ -130,7 +143,6 @@ class Display(QWidget):
   def paintEvent(self, event):
     width = int(self.size().width());     height = int(self.size().height())
     lh = self.dta.shape[1]
-    clrs = np.where(self.dta[mdl.PRM],1,0) 
     qp = QPainter()
     qp.begin(self)
     qp.setPen(Qt.cyan)
@@ -148,8 +160,15 @@ class Display(QWidget):
     for i in range(lh):
       gx = int((self.dta[mdl.POS_X,i]/self.scaleFact + 0.5)*width)
       gy = int((-self.dta[mdl.POS_Y,i]/self.scaleFact + 0.5)*height)
-      qp.setPen(pallette[clrs[i]])
-      qp.drawEllipse(gx-2, gy-2, 4, 4)   
+      qp.setPen(pallette[self.agtClrs[i]])
+      qp.drawEllipse(gx-2, gy-2, 4, 4)
+      if i in self.showCircles:      
+        rx = int(self.dta[mdl.CF,i]/self.scaleFact*width); ry = int(self.dta[mdl.CF,i]/self.scaleFact*height) 
+        qp.setPen(Qt.darkGreen)
+        qp.drawEllipse(gx-rx, gy-ry, 2*rx, 2*ry)  
+        rx = int(self.dta[mdl.RF,i]/self.scaleFact*width); ry = int(self.dta[mdl.RF,i]/self.scaleFact*height) 
+        qp.setPen(Qt.magenta)
+        qp.drawEllipse(gx-rx, gy-ry, 2*rx, 2*ry)  
     qp.end()
 ## 
 ## end of Display class
@@ -165,7 +184,7 @@ class InfoDisplay(QMainWindow):
     super(InfoDisplay, self).__init__(parent=parent)
     
     self.setWindowTitle("Information Display")
-    self.resize(1200, 700)
+    self.setGeometry(900, 0, 600, 700)
     self.centralwidget = QWidget(self)
     self.centralwidget.setObjectName("centralwidget")
     self.setCentralWidget(self.centralwidget)

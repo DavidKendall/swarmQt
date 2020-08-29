@@ -137,7 +137,7 @@ def compute_coh(b, xv, yv, mag, ecf, ekc):
         b[COH_X][i] = 0.0
         b[COH_Y][i] = 0.0
         for j in range(n_agents):
-            if j != i and mag[j, i] <= ecf[i, j]:
+            if j != i and mag[j, i] <= ecf[j, i]:
                 b[COH_X][i] = b[COH_X][i] + (xv[j,i] * ekc[j,i])
                 b[COH_Y][i] = b[COH_Y][i] + (yv[j,i] * ekc[j,i])
 
