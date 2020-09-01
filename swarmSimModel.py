@@ -110,7 +110,7 @@ def mk_swarm(xs, ys, *, cf=4.0, rf=3.0, kc=1.0, kr=1.0, kd=0.0, goal=0.0):
     b[REP_N,:] = 0.                                 # initially no repulsion neighbours
     return b
 
-@jit(nopython=True, fastmath=True, parallel=True, cache=True)
+@jit(nopython=True, fastmath=True, cache=True)
 def all_pairs_mag(b, xv, yv, mag, ecf):
     n_agents = b.shape[1]
     b[COH_N].fill(0.)
@@ -122,13 +122,12 @@ def all_pairs_mag(b, xv, yv, mag, ecf):
             yv[j,i] = -yv[i,j]
             mag[i,j] = np.sqrt(xv[i,j] ** 2 + yv[i,j] ** 2)
             mag[j,i] = mag[i,j]
-            if mag[i,j] <= ecf[j,i]:
+            if mag[j,i] <= ecf[j,i]:
                 b[COH_N][i] = b[COH_N][i] + 1
                 b[COH_N][j] = b[COH_N][j] + 1
         xv[i,i] = 0.0
         yv[i,i] = 0.0
         mag[i,i] = 0.0
-    return xv, yv, mag
 
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
 def compute_coh(b, xv, yv, mag, ecf, ekc):
@@ -164,13 +163,13 @@ def onPerim(b, xv, yv, mag, ecf):
         nbrs = np.full(int(b[COH_N][i]), 0)
         k = 0
         for j in range(n_agents):
-            if j != i and mag[j, i] <= ecf[i, j]:
+            if j != i and mag[j, i] <= ecf[j, i]:
                 nbrs[k] = j
                 k += 1
         nbr_sort(nbrs, ang, i)
         for j in range(int(b[COH_N][i])):
             k = (j + 1) % int(b[COH_N][i])
-            if mag[nbrs[k],nbrs[j]] > ecf[nbrs[j],nbrs[k]]: # nbrs[j], nbrs[k] are not cohesion neighbours
+            if mag[nbrs[k],nbrs[j]] > ecf[nbrs[k],nbrs[j]]: # nbrs[j] and nbrs[k] are not cohesion neighbours
                 result[i] = True
                 break
             delta = ang[:,i][nbrs[k]] - ang[:,i][nbrs[j]]
@@ -205,7 +204,6 @@ def compute_erf(b, scale):
                 ekr[j,i] = b[KR][j]
     return erf, ekc, ekr
 
-
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
 def compute_rep_linear(b, xv, yv, mag, erf, ekr):
     n_agents = b.shape[1]
@@ -219,10 +217,10 @@ def compute_rep_linear(b, xv, yv, mag, erf, ekr):
                 b[REP_X][i] = b[REP_X][i] + ((mag[j,i] - erf[i,j]) * (xv[j,i] / mag[j,i]) * ekr[j,i])
                 b[REP_Y][i] = b[REP_Y][i] + ((mag[j,i] - erf[i,j]) * (yv[j,i] / mag[j,i]) * ekr[j,i])
 
-@jit(nopython=True, fastmath=True)
+@jit(nopython=True, fastmath=True, parallel=True, cache=True)
 def compute_rep_quadratic(b, xv, yv, mag, erf, ekr):
     n_agents = b.shape[1]
-    for i in range(n_agents):
+    for i in prange(n_agents):
         b[REP_N][i] = 0.0
         b[REP_X][i] = 0.0
         b[REP_Y][i] = 0.0
@@ -232,10 +230,10 @@ def compute_rep_quadratic(b, xv, yv, mag, erf, ekr):
                 b[REP_X][i] = b[REP_X][i] + (-erf[i,j] * (mag[j,i] ** -2) * (xv[j,i] / mag[j,i]) * ekr[j,i])
                 b[REP_Y][i] = b[REP_Y][i] + (-erf[i,j] * (mag[j,i] ** -2) * (yv[j,i] / mag[j,i]) * ekr[j,i])
 
-@jit(nopython=True, fastmath=True)
+@jit(nopython=True, fastmath=True, parallel=True, cache=True)
 def compute_rep_exponential(b, xv, yv, mag, erf, ekr, exp_rate):
     n_agents = b.shape[1]
-    for i in range(n_agents):
+    for i in prange(n_agents):
         b[REP_N][i] = 0.0
         b[REP_X][i] = 0.0
         b[REP_Y][i] = 0.0
@@ -256,7 +254,7 @@ def update_resultant(b, stability_factor, speed):
         else:
             b[RES_X][i] = 0.0
             b[RES_Y][i] = 0.0
-             
+ 
 def compute_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perimeter_directed=False, stability_factor=0.0, perimeter_packing_factor=1.0):
     """
     Compute one step in the evolution of swarm `b`, update the COH, REP, DIR and RES fields
@@ -308,7 +306,8 @@ def compute_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perimeter_dir
                   
     # normalise the resultant and update for speed, adjusted for stability    
     update_resultant(b, stability_factor, speed)
-    return xv, yv, mag, ang, ecf, erf, ekc, ekr  # helpful in calculation of metrics, instrumentation, debugging
+
+    return xv, yv, mag, ang, ecf, erf, ekc, ekr         # helpful in calculation of metrics, instrumentation, debugging
 
 def apply_step(b):
     """
@@ -329,14 +328,15 @@ def mu_sigma_d(mag, coh_n):
     return mu_d, sigma_d
 
 def mu_sigma_p(b):
-    vcr = b[KC] * b[COH_X:COH_Y+1] + b[KR] * b[REP_X:REP_Y+1]       # the weighted cohesion/repulsion vector of every agent
-    vcr_mag = np.hypot(vcr[0], vcr[1])                              # the magnitude of the weighted cohesion/repulsion vector of every agent
-    vc_mag = b[KC] * np.hypot(b[COH_X], b[COH_Y])                   # the magnitude of the cohesion component of the cohesion/repulsion vector
-    vr_mag = b[KR] * np.hypot(b[REP_X], b[REP_Y])                   # the magnitude of the repulsion component of the cohesion/repulsion vector                 
-    P = np.where(vc_mag > vr_mag, vcr_mag, -vcr_mag)                # the implementation of P as defined
-    n_agents = b.shape[1]                                           # the total number of agents in the swarm
-    mu_p = np.sum(P) / n_agents                                     # the mean 
-    sigma_p = np.sqrt(np.sum((P - mu_p) ** 2) / n_agents)           # the standard deviation
+    vcr_x = b[COH_X] + b[REP_X]                                 # the weighted cohesion/repulsion vector of every agent
+    vcr_y = b[COH_Y] + b[REP_Y]
+    vcr_mag = np.hypot(vcr_x, vcr_y)                            # the magnitude of the weighted cohesion/repulsion vector of every agent
+    vc_mag = np.hypot(b[COH_X], b[COH_Y])                       # the magnitude of the cohesion component of the cohesion/repulsion vector
+    vr_mag = np.hypot(b[REP_X], b[REP_Y])                       # the magnitude of the repulsion component of the cohesion/repulsion vector
+    P = np.where(vc_mag > vr_mag, vcr_mag, -vcr_mag)            # the implementation of P as defined
+    n_agents = b.shape[1]                                       # the total number of agents in the swarm
+    mu_p = np.sum(P) / n_agents                                 # the mean 
+    sigma_p = np.sqrt(np.sum((P - mu_p) ** 2) / n_agents)       # the standard deviation
     return mu_p, sigma_p
 
 '''
