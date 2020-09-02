@@ -315,16 +315,28 @@ def apply_step(b):
     """
     b[POS_X:POS_Y+1] += b[RES_X:RES_Y+1]            
 
-
-def mu_sigma_d(mag, coh_n):
-    """
-    Compute the mean and SD of the distance over all agents between an agent and its cohesion neighbours.
-    
-    :param mag: an array giving all pairwise distances between agents
-    :param coh_n: an array giving the cohesion neighbours of all agents
-    """
-    mu_d = np.sum(mag[coh_n]) / np.sum(coh_n)
-    sigma_d = np.sqrt(np.sum((mag[coh_n] - mu_d) ** 2) / np.sum(coh_n))
+@jit(nopython=True, fastmath=True)
+def mu_sigma_d(mag, ecf):
+    n_agents = mag.shape[0]
+    msum = 0.
+    nsum = 0
+    for i in range(n_agents):
+        for j in range(i):
+            if mag[j, i] <= ecf[j, i]:
+                msum = msum + mag[j, i]
+                nsum += 1
+            if mag[i, j] <= ecf[i, j]:
+                msum = msum + mag[i, j]
+                nsum += 1
+    mu_d = msum / nsum
+    vsum = 0.
+    for i in range(n_agents):
+        for j in range(i):
+            if mag[j, i] <= ecf[j, i]:
+                vsum += ((mag[j, i] - mu_d) * (mag[j, i] - mu_d))
+            if mag[i, j] <= ecf[i, j]:
+                vsum += ((mag[i, j] - mu_d) * (mag[i, j] - mu_d))
+    sigma_d = np.sqrt(vsum / nsum)
     return mu_d, sigma_d
 
 def mu_sigma_p(b):
