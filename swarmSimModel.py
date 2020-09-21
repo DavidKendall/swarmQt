@@ -157,7 +157,7 @@ def onPerim(b, xv, yv, mag, ecf):
     result = np.full(n_agents, False)
     ang = np.arctan2(yv, xv)                    # all pairs polar angles
     for i in prange(n_agents):
-        if b[COH_N][i] == 0:
+        if b[COH_N][i] < 3:
             result[i] = True
             continue
         nbrs = np.full(int(b[COH_N][i]), 0)
@@ -318,25 +318,21 @@ def apply_step(b):
 @jit(nopython=True, fastmath=True)
 def mu_sigma_d(mag, ecf):
     n_agents = mag.shape[0]
-    msum = 0.
-    nsum = 0
-    for i in range(n_agents):
+    msum = 0; msum_sq = 0; nsum = 0
+    for i in prange(n_agents):
         for j in range(i):
             if mag[j, i] <= ecf[j, i]:
-                msum = msum + mag[j, i]
+                msum += mag[j, i]
+                msum_sq += mag[j, i] **2
                 nsum += 1
             if mag[i, j] <= ecf[i, j]:
-                msum = msum + mag[i, j]
+                msum += mag[i, j]
+                msum_sq += mag[i, j] **2
                 nsum += 1
     mu_d = msum / nsum
-    vsum = 0.
-    for i in range(n_agents):
-        for j in range(i):
-            if mag[j, i] <= ecf[j, i]:
-                vsum += ((mag[j, i] - mu_d) * (mag[j, i] - mu_d))
-            if mag[i, j] <= ecf[i, j]:
-                vsum += ((mag[i, j] - mu_d) * (mag[i, j] - mu_d))
-    sigma_d = np.sqrt(vsum / nsum)
+    mu_d_sq = msum_sq / nsum
+    var_d = mu_d_sq - mu_d ** 2 
+    sigma_d = np.sqrt(var_d)
     return mu_d, sigma_d
 
 def mu_sigma_p(b):
