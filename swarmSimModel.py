@@ -56,8 +56,8 @@ default_swarm_params = {
     'grid' : 10.0,
     'seed' : None,
     'scaling' : 'linear',
-    'exp_rate' : '0.2',
-    'speed' : '0.05',
+    'exp_rate' : 0.2,
+    'speed' : 0.05,
     'perimeter_directed' : False,
     'stability_factor' : 0.0,
     'perimeter_packing_factor' : 1.0

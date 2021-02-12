@@ -400,6 +400,7 @@ def runQtView(args):
     b = mdl.mk_rand_swarm(n, **swarm_args)
   elif 'read_coords' in swarm_args.keys():
     state = mdl.load_swarm()
+    print(state)
     swarm_args = {k:v for k,v in state['params'].items() if k in ['cf', 'rf', 'kc', 'kr', 'kd', 'goal']}
     step_args = {k:v for k,v in state['params'].items() if k in ['scaling', 'exp_rate', 'speed', 'perimeter_directed', 'stability_factor', 'perimeter_packing_factor']} 
     b = mdl.mk_swarm(state['coords'][0], state['coords'][1], **swarm_args)
