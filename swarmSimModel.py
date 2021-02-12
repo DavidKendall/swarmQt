@@ -16,6 +16,7 @@ swarmSimModel.py - 2020 Aug 13
      resultant movement.
  - d-step and all its helpers are decorated with numba @jit decorations to boost performance
 """
+import json
 import numpy as np
 from numba import jit, prange
 
@@ -43,6 +44,24 @@ REP_N  = 19   # number of repulsion neighbours
 
 N_ROWS = 20   # number of rows in array that models swarm state
 eps    = np.finfo('float64').eps # smallest positive 64 bit float value
+
+default_swarm_params = {
+    'cf' : 4.0,
+    'rf' : 3.0,
+    'kc' : 1.0,
+    'kr' : 1.0,
+    'kd' : 0.0,
+    'goal' : 0.0,
+    'loc' : 0.0,
+    'grid' : 10.0,
+    'seed' : None,
+    'scaling' : 'linear',
+    'exp_rate' : '0.2',
+    'speed' : '0.05',
+    'perimeter_directed' : False,
+    'stability_factor' : 0.0,
+    'perimeter_packing_factor' : 1.0
+}
 
 def mk_rand_swarm(n, *, cf=4.0, rf=3.0, kc=1.0, kr=1.0, kd=0.0, goal=0.0, loc=0.0, grid=10, seed=None):
     '''
@@ -191,10 +210,14 @@ def compute_erf(b, scale):
             if b[PRM][i] and b[PRM][j]:
                 erf[i,j] = b[RF][i] * scale
                 erf[j,i] = b[RF][j] * scale
-                ekc[i,j] = b[KC][i] * (1. / scale)
-                ekc[j,i] = b[KC][j] * (1. / scale)
-                ekr[i,j] = b[KR][i] * scale
-                ekr[j,i] = b[KR][j] * scale
+                # ekc[i,j] = b[KC][i] * (1. / scale)
+                # ekc[j,i] = b[KC][j] * (1. / scale)
+                ekc[i,j] = b[KC][i] 
+                ekc[j,i] = b[KC][j] 
+                # ekr[i,j] = b[KR][i] * scale
+                # ekr[j,i] = b[KR][j] * scale
+                ekr[i,j] = b[KR][i]
+                ekr[j,i] = b[KR][j]
             else:
                 erf[i,j] = b[RF][i]
                 erf[j,i] = b[RF][j]
@@ -214,8 +237,10 @@ def compute_rep_linear(b, xv, yv, mag, erf, ekr):
         for j in range(n_agents):
             if j != i and mag[j, i] <= erf[i,j]:
                 b[REP_N][i] = b[REP_N][i] + 1
-                b[REP_X][i] = b[REP_X][i] + ((mag[j,i] - erf[i,j]) * (xv[j,i] / mag[j,i]) * ekr[j,i])
-                b[REP_Y][i] = b[REP_Y][i] + ((mag[j,i] - erf[i,j]) * (yv[j,i] / mag[j,i]) * ekr[j,i])
+                # b[REP_X][i] = b[REP_X][i] + ((mag[j,i] - erf[i,j]) * (xv[j,i] / mag[j,i]) * ekr[j,i])
+                # b[REP_Y][i] = b[REP_Y][i] + ((mag[j,i] - erf[i,j]) * (yv[j,i] / mag[j,i]) * ekr[j,i])
+                b[REP_X][i] = b[REP_X][i] + (1 - (erf[i,j] / mag[j,i])) * xv[j,i] * ekr[j,i]
+                b[REP_Y][i] = b[REP_Y][i] + (1 - (erf[i,j] / mag[j,i])) * yv[j,i] * ekr[j,i]
 
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
 def compute_rep_quadratic(b, xv, yv, mag, erf, ekr):
@@ -395,3 +420,18 @@ def readCoords(path):
     xs = cds[0::2]
     ys = cds[1::2]
     return xs, ys
+
+def dump_swarm(b, swarm_args, step_args):
+    state = {
+        'params' : {**default_swarm_params, **swarm_args, **step_args},
+        'coords' : b.tolist()
+    }    
+    with open('swarm.json', 'w') as f:
+        json.dump(state, f)
+        f.close()
+
+def load_swarm():
+    with open('swarm.json', 'r') as f:
+        state = json.load(f)
+        f.close()
+    return state

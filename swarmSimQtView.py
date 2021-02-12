@@ -399,15 +399,17 @@ def runQtView(args):
     del swarm_args['random']
     b = mdl.mk_rand_swarm(n, **swarm_args)
   elif 'read_coords' in swarm_args.keys():
-    xs, ys = mdl.readCoords(swarm_args['read_coords'])
-    del swarm_args['read_coords']
-    b = mdl.mk_swarm(xs, ys, **swarm_args)
+    state = mdl.load_swarm()
+    swarm_args = {k:v for k,v in state['params'].items() if k in ['cf', 'rf', 'kc', 'kr', 'kd', 'goal']}
+    step_args = {k:v for k,v in state['params'].items() if k in ['scaling', 'exp_rate', 'speed', 'perimeter_directed', 'stability_factor', 'perimeter_packing_factor']} 
+    b = mdl.mk_swarm(state['coords'][0], state['coords'][1], **swarm_args)
   elif 'load_state' in swarm_args.keys():
     b = mdl.loadState(swarm_args['load_state'])
   else:
     print("Error in swarm creation")
     return
 
+  mdl.dump_swarm(b[mdl.POS_X: mdl.POS_Y+1], swarm_args, step_args) 
   app = QApplication([]) # constructor requires no runtime args
   win = Window(b, step_args)
   win.show()
