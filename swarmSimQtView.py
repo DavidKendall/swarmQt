@@ -41,6 +41,7 @@ import swarmSimModel as mdl
 import numpy as np
 import sys
 import argparse
+import json
 
 pallette = [Qt.black, Qt.red, Qt.darkGreen, Qt.blue, Qt.magenta, Qt.cyan, Qt.yellow]
 
@@ -393,23 +394,27 @@ Run the QtView
 '''
 def runQtView(args):
   swarm_args = {k:v for k,v in args.items() if k in ['random', 'load_state', 'read_coords', 'cf', 'rf', 'kc', 'kr', 'kd', 'goal', 'loc', 'grid', 'seed'] and v is not None}
-  step_args = {k:v for k,v in args.items() if k in ['scaling', 'exp_rate', 'speed', 'perimeter_directed', 'stability_factor', 'perimeter_packing_factor'] and v is not None} 
+  step_args = {k:v for k,v in args.items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'pc', 'pr'] and v is not None} 
   if 'random' in swarm_args.keys():
     n = swarm_args['random']
+    goal = json.loads(swarm_args['goal'])
+    swarm_args['goal'] = [[goal[0]], [goal[1]]]
     del swarm_args['random']
     b = mdl.mk_rand_swarm(n, **swarm_args)
   elif 'read_coords' in swarm_args.keys():
     state = mdl.load_swarm()
-    swarm_args = {k:v for k,v in state['params'].items() if k in ['cf', 'rf', 'kc', 'kr', 'kd', 'goal']}
-    step_args = {k:v for k,v in state['params'].items() if k in ['scaling', 'exp_rate', 'speed', 'perimeter_directed', 'stability_factor', 'perimeter_packing_factor']} 
-    b = mdl.mk_swarm(state['coords'][0], state['coords'][1], **swarm_args)
+    swarm_args = {k:v for k,v in state['params'].items() if k in ['cb', 'rb', 'kc', 'kr', 'kd']}
+    swarm_args['goal'] = np.array(state['destinations']['coords'])[:2,0].reshape(2,1).tolist()
+    step_args = {k:v for k,v in state['params'].items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'pc', 'pr']} 
+    b = mdl.mk_swarm(state['agents']['coords'][0], state['agents']['coords'][1], **swarm_args)
+    goal = state['destinations']['coords'][:][0]
   elif 'load_state' in swarm_args.keys():
     b = mdl.loadState(swarm_args['load_state'])
   else:
     print("Error in swarm creation")
     return
 
-  mdl.dump_swarm(b[mdl.POS_X: mdl.POS_Y+1], swarm_args, step_args) 
+  mdl.dump_swarm(b, swarm_args, step_args) 
   app = QApplication([]) # constructor requires no runtime args
   win = Window(b, step_args)
   win.show()
@@ -421,21 +426,22 @@ swarm = parser.add_mutually_exclusive_group(required=True)
 swarm.add_argument('-r', '--random', type=int, help='create random swarm of size RANDOM')
 swarm.add_argument('-s', '--load_state', help='load initial swarm state from LOAD_STATE')
 swarm.add_argument('-c', '--read_coords', help='read initial agent positions from READ_COORDS')
-parser.add_argument('--cf', type=float, help='radius of the cohesion field')
-parser.add_argument('--rf', type=float, help='radius of the repulsion field')
+parser.add_argument('--cb', type=float, help='radius of the cohesion field')
+parser.add_argument('--rb', type=float, help='radius of the repulsion field')
 parser.add_argument('--kc', type=float, help='weight of the cohesion vector')
 parser.add_argument('--kr', type=float, help='weight of the repulsion vector')
 parser.add_argument('--kd', type=float, help='weight of the direction vector')
-parser.add_argument('--goal', type=float, help='the swarm has a goal with coordinates (GOAL, GOAL)')
+parser.add_argument('--goal', default='[0.0, 0.0]', help='GOAL should be a string like "[10.0, 15.5]"')
 parser.add_argument('--loc', type=float, help='initially centre of the swarm is at coordinates (LOC, LOC)')
 parser.add_argument('--grid', type=float, help='initially swarms is distributed in an area of 2.GRID x 2.GRID')
 parser.add_argument('--seed', type=int, help='seed for random number generator for random swarm')
 parser.add_argument('--scaling', choices=['linear', 'quadratic', 'exponential'], help='scaling method for computation of repulsion vector')
 parser.add_argument('--exp_rate', type=float, help='exponential rate if scaling="exponential"')
 parser.add_argument('--speed', type=float, help='distance moved per unit time')
-parser.add_argument('--perimeter_directed', action='store_true', help='use only perimeter agents in goal seeking')
+parser.add_argument('--perim_coord', action='store_true', help='use only perimeter agents in goal seeking')
 parser.add_argument('--stability_factor', type=float, help='constrain agent movement if magnitude of resultant vector is less than STABILITY_FACTOR * speed')
-parser.add_argument('--perimeter_packing_factor', type=float, help='reduce repulsion field by PERIMETER_PACKING_FACTOR for perimeter agents')
+parser.add_argument('--pc', type=float, help='multiply cohesion weight by PC (>= 1.0) for perimeter agents')
+parser.add_argument('--pr', type=float, help='multiply repulsion field radius by PR (0 < PR <= 1.0) for perimeter agents')
 args = vars(parser.parse_args())
 runQtView(args)
 
