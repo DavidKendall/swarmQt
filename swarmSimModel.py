@@ -48,6 +48,7 @@ eps    = np.finfo('float64').eps # smallest positive 64 bit float value
 default_swarm_params = {
     'cb' : 4.0,
     'rb' : 3.0,
+    'ob' : 3.0,
     'kc' : 1.0,
     'kr' : 1.0,
     'kd' : 0.0,
@@ -430,7 +431,7 @@ def dump_swarm(b, swarm_args, step_args):
         'params': {**default_swarm_params, **swarm_args, **step_args},
         'agents': {'coords': coords}, 
         'destinations' : {'coords': [goal[0], goal[1], [0.0]]},
-        'obstacles' : {'coords': []} 
+        'obstacles' : {'coords': [[],[],[]]} 
     }
     with open('swarm.json', 'w') as f:
         json.dump(state, f)
