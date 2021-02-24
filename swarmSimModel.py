@@ -95,7 +95,7 @@ def mk_rand_swarm(n, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, goal=[[0.0], [0.
     b[REP_N,:] = 0.                                 # initially no repulsion neighbours
     return b
 
-def mk_swarm(xs, ys, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, goal=0.0):
+def mk_swarm(xs, ys, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, goal=[[0.0],[0.0]]):
     '''
     create a 2-D array of N_ROWS attributes for len(xs) agents.
 
@@ -434,7 +434,7 @@ def dump_swarm(b, swarm_args, step_args):
         'obstacles' : {'coords': [[],[],[]]} 
     }
     with open('swarm.json', 'w') as f:
-        json.dump(state, f)
+        json.dump(state, f, indent=2)
         f.close()
 
 def load_swarm():

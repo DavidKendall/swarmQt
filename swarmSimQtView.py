@@ -404,7 +404,10 @@ def runQtView(args):
   elif 'read_coords' in swarm_args.keys():
     state = mdl.load_swarm()
     swarm_args = {k:v for k,v in state['params'].items() if k in ['cb', 'rb', 'kc', 'kr', 'kd']}
-    swarm_args['goal'] = np.array(state['destinations']['coords'])[:2,0].reshape(2,1).tolist()
+    if state['destinations']['coords'] == [[],[],[]]:
+        swarm_args['goal'] = [[0.0],[0.0]]
+    else:
+        swarm_args['goal'] = np.array(state['destinations']['coords'])[:2,0].reshape(2,1).tolist()
     step_args = {k:v for k,v in state['params'].items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'pc', 'pr']} 
     b = mdl.mk_swarm(state['agents']['coords'][0], state['agents']['coords'][1], **swarm_args)
     goal = state['destinations']['coords'][:][0]
