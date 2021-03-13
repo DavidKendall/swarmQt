@@ -1,7 +1,0 @@
-# DK 13-02-2021
-#
-# A 7 agent swarm with an active goal (kd = 1.0) that settles around the target location
-# Contrast this behaviour with the swarm defined in drift.json -- value of the kd parameter is the
-# only difference.
-#
-{"params": {"cf": 4.0, "rf": 3.0, "kc": 1.0, "kr": 10.0, "kd": 1.0, "goal": 0.0, "loc": 0.0, "grid": 3.0, "seed": null, "scaling": "linear", "exp_rate": 0.2, "speed": 0.05, "perimeter_directed": false, "stability_factor": 0.0, "perimeter_packing_factor": 1.0}, "coords": [[0.0, 1.2531199310994117, -1.220868856992761, 1.5896394624574368, -2.7929740943100496, 0.9999050830116833, 2.018665540152085], [0.0, -1.750732017635805, -0.3824913537401491, -1.5028856748033934, -0.4151057229117585, -0.9795497781023648, 0.0005388764347031838]]}

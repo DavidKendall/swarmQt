@@ -16,9 +16,7 @@ swarmSimModel.py - 2020 Aug 13
      resultant movement.
  - d-step and all its helpers are decorated with numba @jit decorations to boost performance
 """
-import json
 import numpy as np
-from numba import jit, prange
 
 # Define some useful array accessor constants
 POS_X  = 0    # x-coordinates of agents position
@@ -53,6 +51,7 @@ default_swarm_params = {
     'kr' : 1.0,
     'kd' : 0.0,
     'ko' : 0.0,
+    'kg' : 0.0,
     'scaling' : 'linear',
     'exp_rate' : 0.2,
     'speed' : 0.05,
@@ -84,7 +83,6 @@ def mk_rand_swarm(n, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, goal=[[0.0], [0.
     b[DIR_X:DIR_Y+1,:] = 0.                         # direction vectors initially [0.0, 0.0]
     b[RES_X:RES_Y + 1,:] = 0.                       # resultant vectors initially [0.0, 0.0]
     b[GOAL_X:GOAL_Y + 1,:] = goal                   # goal is at [goal[0], goal[1]], default [0.0, 0.0]
-    print(f"Goal is {b[GOAL_X:GOAL_Y + 1,:]}") 
     b[CF,:] = cb                                    # cohesion field of all agents set to cb
     b[RF,:] = rb                                    # repulsion field of all agents set to rb
     b[KC,:] = kc                                    # cohesion weight for all agents set to kc
@@ -95,7 +93,7 @@ def mk_rand_swarm(n, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, goal=[[0.0], [0.
     b[REP_N,:] = 0.                                 # initially no repulsion neighbours
     return b
 
-def mk_swarm(xs, ys, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, goal=[[0.0],[0.0]]):
+def mk_swarm(xs, ys, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, goal=[[0.0], [0.0]]):
     '''
     create a 2-D array of N_ROWS attributes for len(xs) agents.
 
@@ -128,7 +126,11 @@ def mk_swarm(xs, ys, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, goal=[[0.0],[0.0
     b[REP_N,:] = 0.                                 # initially no repulsion neighbours
     return b
 
-@jit(nopython=True, fastmath=True, cache=True)
+# Numba-accelerated simulator
+
+from numba import jit, prange
+
+@jit(nopython=True, fastmath=True, parallel=True, cache=True)
 def all_pairs_mag(b, xv, yv, mag, ecb):
     n_agents = b.shape[1]
     b[COH_N].fill(0.)
@@ -187,13 +189,13 @@ def onPerim(b, xv, yv, mag, ecb):
         nbr_sort(nbrs, ang, i)
         for j in range(int(b[COH_N][i])):
             k = (j + 1) % int(b[COH_N][i])
-            if mag[nbrs[k],nbrs[j]] > ecb[nbrs[k],nbrs[j]]: # nbrs[j] and nbrs[k] are not cohesion neighbours
+            if mag[nbrs[k],nbrs[j]] > ecb[nbrs[k],nbrs[j]]:    # nbrs[j] and nbrs[k] are not cohesion neighbours
                 result[i] = True
                 break
             delta = ang[:,i][nbrs[k]] - ang[:,i][nbrs[j]]
             if (delta < 0):
                 delta += np.pi * 2.0;
-            if (delta > np.pi) or (b[PRM][i] and delta > 2.8):
+            if (delta > np.pi):
                 result[i] = True;
                 break;
     return result, ang
@@ -205,25 +207,15 @@ def compute_erf(b, cscale, rscale):
     ekc = np.empty((n_agents, n_agents))
     ekr = np.empty((n_agents, n_agents))
     for i in prange(n_agents):
-        for j in range(i + 1):
+        for j in range(n_agents):
             if b[PRM][i] and b[PRM][j]:
                 erf[i,j] = b[RF][i] * rscale
-                erf[j,i] = b[RF][j] * rscale
-                # ekc[i,j] = b[KC][i] * (1. / scale)
-                # ekc[j,i] = b[KC][j] * (1. / scale)
                 ekc[i,j] = b[KC][i] * cscale
-                ekc[j,i] = b[KC][j] * cscale
-                # ekr[i,j] = b[KR][i] * scale
-                # ekr[j,i] = b[KR][j] * scale
                 ekr[i,j] = b[KR][i]
-                ekr[j,i] = b[KR][j]
             else:
                 erf[i,j] = b[RF][i]
-                erf[j,i] = b[RF][j]
                 ekc[i,j] = b[KC][i]
-                ekc[j,i] = b[KC][j]
                 ekr[i,j] = b[KR][i]
-                ekr[j,i] = b[KR][j]
     return erf, ekc, ekr
 
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
@@ -236,10 +228,8 @@ def compute_rep_linear(b, xv, yv, mag, erf, ekr):
         for j in range(n_agents):
             if j != i and mag[j, i] <= erf[i,j]:
                 b[REP_N][i] = b[REP_N][i] + 1
-                # b[REP_X][i] = b[REP_X][i] + ((mag[j,i] - erf[i,j]) * (xv[j,i] / mag[j,i]) * ekr[j,i])
-                # b[REP_Y][i] = b[REP_Y][i] + ((mag[j,i] - erf[i,j]) * (yv[j,i] / mag[j,i]) * ekr[j,i])
-                b[REP_X][i] = b[REP_X][i] + (1 - (erf[i,j] / mag[j,i])) * xv[j,i] * ekr[j,i]
-                b[REP_Y][i] = b[REP_Y][i] + (1 - (erf[i,j] / mag[j,i])) * yv[j,i] * ekr[j,i]
+                b[REP_X][i] = b[REP_X][i] + (1. - (erf[i,j] / mag[j,i])) * xv[j,i] * ekr[j,i]
+                b[REP_Y][i] = b[REP_Y][i] + (1. - (erf[i,j] / mag[j,i])) * yv[j,i] * ekr[j,i]
 
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
 def compute_rep_quadratic(b, xv, yv, mag, erf, ekr):
@@ -340,7 +330,14 @@ def apply_step(b):
     Assuming the step has been computed so that RES fields are up to date, update positions
     """
     b[POS_X:POS_Y+1] += b[RES_X:RES_Y+1]
+    np.around(b[POS_X:POS_Y+1], 9, out=b[POS_X:POS_Y+1])
+    
+def d_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perim_coord=False, stability_factor=0.0, pc=1.0, pr=1.0):
+    xv,yv,mag,ang,ecf,erf,ekc,ekr = compute_step(b, scaling=scaling, exp_rate=exp_rate, speed=speed, perim_coord=perim_coord, stability_factor=stability_factor, pc=pc, pr=pr)
+    apply_step(b)
+    return xv,yv,mag,ang,ecf,erf,ekc,ekr
 
+# Metrics
 @jit(nopython=True, fastmath=True)
 def mu_sigma_d(mag, ecb):
     n_agents = mag.shape[0]
@@ -373,6 +370,10 @@ def mu_sigma_p(b):
     sigma_p = np.sqrt(np.sum((P - mu_p) ** 2) / n_agents)       # the standard deviation
     return mu_p, sigma_p
 
+# Some utility functions
+
+import json
+
 '''
 Data persistence methods
 '''
@@ -385,9 +386,9 @@ def saveState(b, path):
     """
     with open(path, 'wt') as f:
         for n in range(np.ma.size(b,1)):
-          for r in range(np.ma.size(b,0)):
-              f.write("{:f}\t".format(b[r][n]))
-          f.write("\n")
+            for r in range(np.ma.size(b,0)):
+                f.write("{:f}\t".format(b[r][n]))
+            f.write("\n")
         f.close()
     print("{:d} agents saved.".format(np.ma.size(b,1)))
 
@@ -398,7 +399,7 @@ def loadState(path):
     :path: path to a file from which the data are to be loaded
     """
     with open(path, 'rt') as f:
-      lines = f.readlines()
+        lines = f.readlines()
     f.close()
     print("{:d} lines read.".format(len(lines)))
     nums = [[float(x) for x in line.split()] for line in lines]
@@ -412,17 +413,17 @@ def readCoords(path):
     :path: path to a file from which the data are to be loaded
     """
     with open(path, 'rt') as f:
-      lines = f.readlines()
+        lines = f.readlines()
     f.close()
     cds = []
     for ln in lines:
-      for wd in ln.split():
-        cds.append(float(wd))
+        for wd in ln.split():
+            cds.append(float(wd))
     xs = cds[0::2]
     ys = cds[1::2]
     return xs, ys
 
-def dump_swarm(b, swarm_args, step_args):
+def dump_swarm(b, swarm_args, step_args, path='swarm.json'):
     goal = swarm_args['goal']
     swarm_args = {k:v for k,v in swarm_args.items() if k in ['cb', 'rb', 'kc', 'kr', 'kd']}
     coords = b[POS_X:POS_Y+1,:].tolist()
@@ -433,12 +434,89 @@ def dump_swarm(b, swarm_args, step_args):
         'destinations' : {'coords': [goal[0], goal[1], [0.0]]},
         'obstacles' : {'coords': [[],[],[]]} 
     }
-    with open('swarm.json', 'w') as f:
-        json.dump(state, f, indent=2)
+    with open(path, 'w') as f:
+        json.dump(state, f, indent=4)
         f.close()
 
-def load_swarm():
-    with open('swarm.json', 'r') as f:
+def load_swarm(path='swarm.json'):
+    with open(path, 'r') as f:
         state = json.load(f)
         f.close()
-    return state
+    swarm_args = {k:v for k,v in state['params'].items() if k in ['cb', 'rb', 'kc', 'kr', 'kd']}
+    if state['destinations']['coords'] == [[],[],[]]:
+        swarm_args['goal'] = [[0.0],[0.0]]
+    else:
+        swarm_args['goal'] = np.array(state['destinations']['coords'])[:2,0].reshape(2,1).tolist()
+    step_args = {k:v for k,v in state['params'].items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'pc', 'pr']} 
+    b = mk_swarm(state['agents']['coords'][0], state['agents']['coords'][1], **swarm_args)
+    goal = state['destinations']['coords'][:][0]
+    return b, swarm_args, step_args
+
+def run_simulation(b, *, with_perimeter=False, step=d_step, **kwargs):
+    """
+    run a simulation of the `step()` function in a simple graphical environment
+    
+    :param b: the array modelling the state of the swarm
+    :param with_perimeter: if True, distinguish between perimeter and internal agents
+    :param step: the step function
+    :param **kwargs: keyword arguments for the step function
+    """
+    fig, ax = plt.subplots(figsize=(4,4))                       # create a graph
+
+    def simulate(i):
+        """
+        Ultra-simple simulation function  
+        """
+        ax.cla()                                                # clear the axes
+        ax.set(xlim=(-15, 15), ylim=(-15, 15))                  # set the limits of the axes
+        step(b, **kwargs)                                       # take a step
+        if with_perimeter:
+            p = b[PRM].astype(bool)
+            snapshot = ax.plot(b[POS_X, p], b[POS_Y, p], 'ro',  # plot perimeter agents
+                               b[POS_X, np.logical_not(p)], b[POS_Y, np.logical_not(p)], 'ko', markersize=2) # plot internal agents
+        else:
+            snapshot = ax.plot(b[POS_X], b[POS_Y], 'ko', markersize=2)  # plot all agents
+        return snapshot
+
+    def init():
+        return []
+    
+    # return a function that calls `simulate` every 100 ms and updates the figure
+    return FuncAnimation(fig, simulate, interval=100, init_func=init)
+
+def log_experiment(path='swarm.json', n_steps=300):
+    b, _, step_args = load_swarm(path)
+    n_agents = b.shape[1]
+    with open('exp.pp.csv', 'wt') as f:
+        f.write("STEP|ID|X|Y|PERIM|CX|CY|CMAG|RX|RY|RMAG|IX|IY|IMAG|DX|DY|DMAG|CHANGEX|CHANGEY|CHANGEMAG\n")
+        for step in range(n_steps):
+            xv,yv,mag,ang,ecf,erf,ekc,ekr = compute_step(b, **step_args)
+            for agent in range(n_agents):
+                f.write(f"{step}|{agent}|{b[POS_X,agent]}|{b[POS_Y,agent]}|{b[PRM,agent].astype(bool)}|{b[COH_X,agent]}|{b[COH_Y,agent]}|{np.hypot(b[COH_X,agent],b[COH_Y,agent])}|{b[REP_X,agent]}|{b[REP_Y,agent]}|{np.hypot(b[REP_X,agent],b[REP_Y,agent])}|{b[COH_X,agent]+b[REP_X,agent]}|{b[COH_Y,agent]+b[REP_Y,agent]}|{np.hypot(b[COH_X,agent]+b[REP_X,agent],b[COH_Y,agent]+b[REP_Y,agent])}|{b[DIR_X,agent]}|{b[DIR_Y,agent]}|{np.hypot(b[DIR_X,agent],b[DIR_Y,agent])}|{b[RES_X,agent]}|{b[RES_Y,agent]}|{np.hypot(b[RES_X,agent],b[RES_Y,agent])}\n")      
+            apply_step(b)
+    f.close()   
+    
+def log_experiment2(path='swarm.json', n_steps=300):
+    b, _, step_args = load_swarm(path)
+    n_agents = b.shape[1]
+    with open('exp.pp2.csv', 'wt') as f:
+        f.write("STEP|ID|X|Y|PERIM|CX|CY|CMAG|RX|RY|RMAG|IX|IY|IMAG|DX|DY|DMAG|CHANGEX|CHANGEY|CHANGEMAG\n")
+        for step in range(n_steps):
+            xv,yv,mag,ang,ecf,erf,ekc,ekr = compute_step2(b, **step_args)
+            for agent in range(n_agents):
+                f.write(f"{step}|{agent}|{b[POS_X,agent]}|{b[POS_Y,agent]}|{b[PRM,agent].astype(bool)}|{b[COH_X,agent]}|{b[COH_Y,agent]}|{np.hypot(b[COH_X,agent],b[COH_Y,agent])}|{b[REP_X,agent]}|{b[REP_Y,agent]}|{np.hypot(b[REP_X,agent],b[REP_Y,agent])}|{b[COH_X,agent]+b[REP_X,agent]}|{b[COH_Y,agent]+b[REP_Y,agent]}|{np.hypot(b[COH_X,agent]+b[REP_X,agent],b[COH_Y,agent]+b[REP_Y,agent])}|{b[DIR_X,agent]}|{b[DIR_Y,agent]}|{np.hypot(b[DIR_X,agent],b[DIR_Y,agent])}|{b[RES_X,agent]}|{b[RES_Y,agent]}|{np.hypot(b[RES_X,agent],b[RES_Y,agent])}\n")      
+            apply_step2(b)
+    f.close()
+
+def check_steps(b1, step_args, n_steps=300, eps=10.0 ** -9):
+    b2 = np.copy(b1)
+    for step in range(n_steps):
+        xv1,yv1,mag1,ang1,ecf1,erf1,ekc1,ekr1 = compute_step(b1, **step_args)
+        xv2,yv2,mag2,ang2,ecf2,erf2,ekc2,ekr2 = compute_step2(b2, **step_args)
+        if np.count_nonzero(np.abs(b1 - b2) <= eps) != b1.size:
+            break
+        apply_step(b1)
+        apply_step(b2)
+    return (step, b1, b2)
+
+
