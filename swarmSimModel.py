@@ -438,6 +438,25 @@ def dump_swarm(b, swarm_args, step_args, path='swarm.json'):
         json.dump(state, f, indent=4)
         f.close()
 
+def dump_swarm_txt(b, swarm_args, step_args, path='swarm.txt'):
+    goal = swarm_args['goal']
+    swarm_args = {k:v for k,v in swarm_args.items() if k in ['cb', 'rb', 'kc', 'kr', 'kd']}
+    coords = b[POS_X:POS_Y+1,:].tolist()
+    coords.append([0.0] * b.shape[1])
+    state = {
+        'params': {**default_swarm_params, **swarm_args, **step_args},
+        'agents': {'coords': coords}, 
+        'destinations' : {'coords': [goal[0], goal[1], [0.0]]},
+        'obstacles' : {'coords': [[],[],[]]} 
+    }
+    with open(path, 'w') as f:
+        for item in state['params'].items():
+            f.write(f"{item[0]} {item[1]}\n")
+        f.write(f"# POS_X, POS_Y --\n")
+        for (x,y) in zip(state['agents']['coords'][0], state['agents']['coords'][1]):
+            f.write(f"{x} {y}\n")
+        f.close()
+
 def load_swarm(path='swarm.json'):
     with open(path, 'r') as f:
         state = json.load(f)
@@ -484,39 +503,54 @@ def run_simulation(b, *, with_perimeter=False, step=d_step, **kwargs):
     # return a function that calls `simulate` every 100 ms and updates the figure
     return FuncAnimation(fig, simulate, interval=100, init_func=init)
 
-def log_experiment(path='swarm.json', n_steps=300):
-    b, _, step_args = load_swarm(path)
+def log_experiment(config_file='swarm.json', n_steps=300, verbose=False, csv_file='exp.pp.csv', compute_func=compute_step):
+    b, _, step_args = load_swarm(config_file)
     n_agents = b.shape[1]
-    with open('exp.pp.csv', 'wt') as f:
-        f.write("STEP|ID|X|Y|PERIM|CX|CY|CMAG|RX|RY|RMAG|IX|IY|IMAG|DX|DY|DMAG|CHANGEX|CHANGEY|CHANGEMAG\n")
-        for step in range(n_steps):
-            xv,yv,mag,ang,ecf,erf,ekc,ekr = compute_step(b, **step_args)
+    with open(csv_file, 'wt') as f:
+        if verbose:
+            f.write("STEP|ID|X|Y|PERIM|CX|CY|CMAG|RX|RY|RMAG|IX|IY|IMAG|DX|DY|DMAG|CHANGEX|CHANGEY|CHANGEMAG\n")
+            step = 0
+            while True:
+                compute_func(b, **step_args)
+                step += 1
+                for agent in range(n_agents):
+                    f.write(f"{step}|{agent}|{b[POS_X,agent]}|{b[POS_Y,agent]}|{b[PRM,agent].astype(bool)}|"
+                            f"{b[COH_X,agent]}|{b[COH_Y,agent]}|{np.hypot(b[COH_X,agent],b[COH_Y,agent])}|"
+                            f"{b[REP_X,agent]}|{b[REP_Y,agent]}|{np.hypot(b[REP_X,agent],b[REP_Y,agent])}|"
+                            f"{b[COH_X,agent]+b[REP_X,agent]}|{b[COH_Y,agent]+b[REP_Y,agent]}|"
+                            f"{np.hypot(b[COH_X,agent]+b[REP_X,agent],b[COH_Y,agent]+b[REP_Y,agent])}|"
+                            f"{b[DIR_X,agent]}|{b[DIR_Y,agent]}|{np.hypot(b[DIR_X,agent],b[DIR_Y,agent])}|"
+                            f"{b[RES_X,agent]}|{b[RES_Y,agent]}|{np.hypot(b[RES_X,agent],b[RES_Y,agent])}\n")
+                if step < n_steps:
+                    apply_step(b)
+                else:
+                    break
+        else:
+            step = 0;
+            while True:
+                compute_func(b, **step_args)
+                step += 1
+                if step < n_steps:
+                    apply_step(b)
+                else:
+                    break
+            f.write("POS_X,POS_Y,COH_X,COH_Y,REP_X,REP_Y,DIR_X,DIR_Y,RES_X,RES_Y,GOAL_X,GOAL_Y,CF,RF,KC,KR,KD,PRM,COH_N,REP_N\n")
             for agent in range(n_agents):
-                f.write(f"{step}|{agent}|{b[POS_X,agent]}|{b[POS_Y,agent]}|{b[PRM,agent].astype(bool)}|{b[COH_X,agent]}|{b[COH_Y,agent]}|{np.hypot(b[COH_X,agent],b[COH_Y,agent])}|{b[REP_X,agent]}|{b[REP_Y,agent]}|{np.hypot(b[REP_X,agent],b[REP_Y,agent])}|{b[COH_X,agent]+b[REP_X,agent]}|{b[COH_Y,agent]+b[REP_Y,agent]}|{np.hypot(b[COH_X,agent]+b[REP_X,agent],b[COH_Y,agent]+b[REP_Y,agent])}|{b[DIR_X,agent]}|{b[DIR_Y,agent]}|{np.hypot(b[DIR_X,agent],b[DIR_Y,agent])}|{b[RES_X,agent]}|{b[RES_Y,agent]}|{np.hypot(b[RES_X,agent],b[RES_Y,agent])}\n")      
-            apply_step(b)
+                f.write(f"{b[POS_X,agent]},{b[POS_Y,agent]},{b[COH_X,agent]},{b[COH_Y,agent]},{b[REP_X,agent]},{b[REP_Y,agent]},"
+                        f"{b[DIR_X,agent]},{b[DIR_Y,agent]},{b[RES_X,agent]},{b[RES_Y,agent]},{b[GOAL_X,agent]},{b[GOAL_Y,agent]},"
+                        f"{b[CF,agent]},{b[RF,agent]},{b[KC,agent]},{b[KR,agent]},{b[KD,agent]},{b[PRM,agent].astype(bool)},"
+                        f"{b[COH_N,agent]},{b[REP_N,agent]}\n")      
     f.close()   
     
-def log_experiment2(path='swarm.json', n_steps=300):
-    b, _, step_args = load_swarm(path)
-    n_agents = b.shape[1]
-    with open('exp.pp2.csv', 'wt') as f:
-        f.write("STEP|ID|X|Y|PERIM|CX|CY|CMAG|RX|RY|RMAG|IX|IY|IMAG|DX|DY|DMAG|CHANGEX|CHANGEY|CHANGEMAG\n")
-        for step in range(n_steps):
-            xv,yv,mag,ang,ecf,erf,ekc,ekr = compute_step2(b, **step_args)
-            for agent in range(n_agents):
-                f.write(f"{step}|{agent}|{b[POS_X,agent]}|{b[POS_Y,agent]}|{b[PRM,agent].astype(bool)}|{b[COH_X,agent]}|{b[COH_Y,agent]}|{np.hypot(b[COH_X,agent],b[COH_Y,agent])}|{b[REP_X,agent]}|{b[REP_Y,agent]}|{np.hypot(b[REP_X,agent],b[REP_Y,agent])}|{b[COH_X,agent]+b[REP_X,agent]}|{b[COH_Y,agent]+b[REP_Y,agent]}|{np.hypot(b[COH_X,agent]+b[REP_X,agent],b[COH_Y,agent]+b[REP_Y,agent])}|{b[DIR_X,agent]}|{b[DIR_Y,agent]}|{np.hypot(b[DIR_X,agent],b[DIR_Y,agent])}|{b[RES_X,agent]}|{b[RES_Y,agent]}|{np.hypot(b[RES_X,agent],b[RES_Y,agent])}\n")      
-            apply_step2(b)
-    f.close()
-
 def check_steps(b1, step_args, n_steps=300, eps=10.0 ** -9):
     b2 = np.copy(b1)
-    for step in range(n_steps):
-        xv1,yv1,mag1,ang1,ecf1,erf1,ekc1,ekr1 = compute_step(b1, **step_args)
-        xv2,yv2,mag2,ang2,ecf2,erf2,ekc2,ekr2 = compute_step2(b2, **step_args)
-        if np.count_nonzero(np.abs(b1 - b2) <= eps) != b1.size:
-            break
-        apply_step(b1)
-        apply_step(b2)
-    return (step, b1, b2)
-
-
+    if np.count_nonzero(np.abs(b1 - b2) <= eps) != b1.size:
+        result = (0, b1, b2)
+    else:
+        for step in range(1, n_steps+1):
+            d_step(b1, **step_args)
+            d_step2(b2, **step_args)
+            if np.count_nonzero(np.abs(b1 - b2) <= eps) != b1.size:
+                break
+        result = (step, b1, b2)
+    return result
