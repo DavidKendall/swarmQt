@@ -387,7 +387,7 @@ def saveState(b, path):
     with open(path, 'wt') as f:
         for n in range(np.ma.size(b,1)):
             for r in range(np.ma.size(b,0)):
-                f.write("{:f}\t".format(b[r][n]))
+                f.write(f"{b[r][n]},")
             f.write("\n")
         f.close()
     print("{:d} agents saved.".format(np.ma.size(b,1)))

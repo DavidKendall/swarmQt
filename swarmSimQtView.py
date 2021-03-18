@@ -33,7 +33,7 @@ d_step function to be invoked (with whatever kwargs have been chosen), then a re
 
 """
 from PyQt5.QtWidgets import QWidget, QApplication, QScrollArea, QPushButton, QMainWindow,\
-           QLabel, QHBoxLayout, QVBoxLayout, QFormLayout, QInputDialog, QLineEdit, QPlainTextEdit
+  QLabel, QHBoxLayout, QVBoxLayout, QFormLayout, QInputDialog, QLineEdit, QPlainTextEdit, QMessageBox
 from PyQt5.QtGui import QPainter, QColor, QCursor
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5 import QtCore
@@ -55,10 +55,11 @@ class Display(QWidget):
   def __init__(self, data, kwargs, scf=100.0):
     super().__init__()
     #self.initUI(2000, 2000)
+    self.runLim = 999999999
     self.dta = data
     self.scaleFact = scf
     self.scaleMultplr = 2 # alt 2, 5
-    self.stepCt = 0
+    self.stepCt = 1
     self.running = False
     self.kwargs = kwargs
     self.xv = None;  self.yv = None; self.mag = None; self.ang = None;
@@ -194,7 +195,6 @@ class InfoDisplay(QMainWindow):
 
     layout = QFormLayout()
     self.tArea = QPlainTextEdit(self)
-    #self.tArea.setReadOnly(True)
     self.tArea.setLineWrapMode(QPlainTextEdit.WidgetWidth)
     layout.addWidget(self.tArea)
     
@@ -221,18 +221,22 @@ class Window(QWidget):
    
   def initUI(self, data, kwargs, intvl=64):
     self.timer = QTimer(self)
-    self.timer.timeout.connect(self.tick) # QWidget.update() fires a paintEvent
+    self.timer.timeout.connect(self.tick) # QWidget.update() fires a "signal"
     self.timer.setInterval(intvl)
  
     self.dsp = Display(data, kwargs)  ## make a Display instance
     
     self.stpLbl = QLabel("{:d}".format(self.dsp.stepCt))
     self.stpBtn = QPushButton("Step")
-    self.rnpBtn = QPushButton("Run")
+    self.rnpBtn = QPushButton("Run to")
+    
+    self.limTbx = QLineEdit(self)
+    self.limTbx.setFixedWidth(85)
+    self.limTbx.setAlignment(Qt.AlignCenter)
+    self.limTbx.setText("{:d}".format(self.dsp.runLim))
+    
     self.fstBtn = QPushButton("Faster")
     self.slwBtn = QPushButton("Slower")
-    self.lngBtn = QPushButton("Longer step")
-    self.shtBtn = QPushButton("Shorter step")
     self.outBtn = QPushButton("Zoom out")
     self.zInBtn = QPushButton("Zoom in")
     self.dmpBtn = QPushButton("Dump")
@@ -246,20 +250,16 @@ class Window(QWidget):
     self.tmrLbl.setAlignment(Qt.AlignCenter)
     self.scfLbl = QLabel("{:.1f}".format(self.dsp.scaleFact))
     self.scfLbl.setAlignment(Qt.AlignCenter)
-    self.sszLbl = QLabel("{:.3f}".format(self.dsp.kwargs['speed']))
-    self.sszLbl.setAlignment(Qt.AlignCenter)
 
     vbox = QVBoxLayout()           ## these buttons laid out vertically,
     vbox.addStretch(1)             ## centred by means of a stretch at each end
     vbox.addWidget(self.stpLbl)
     vbox.addWidget(self.stpBtn)
     vbox.addWidget(self.rnpBtn)
+    vbox.addWidget(self.limTbx)
     vbox.addWidget(self.fstBtn)
     vbox.addWidget(self.tmrLbl)
     vbox.addWidget(self.slwBtn)
-    vbox.addWidget(self.lngBtn)
-    vbox.addWidget(self.sszLbl)
-    vbox.addWidget(self.shtBtn)
     vbox.addWidget(self.outBtn)
     vbox.addWidget(self.scfLbl)
     vbox.addWidget(self.zInBtn)
@@ -283,12 +283,12 @@ class Window(QWidget):
 
     self.setGeometry(50, 50, 1200, 700) # Initally 1200x700 px with 50 px offsets
 
-    self.rnpBtn.clicked.connect(self.stopStart) # Register handlers: 
-    self.fstBtn.clicked.connect(self.faster)    #   - methods in Display instance
-    self.slwBtn.clicked.connect(self.slower)
-    self.stpBtn.clicked.connect(self.step)
-    self.lngBtn.clicked.connect(self.longerStep)
-    self.shtBtn.clicked.connect(self.shorterStep)
+    # Register handlers - methods in Display instance
+    self.rnpBtn.clicked.connect(self.stopStart)           #run-to/pause btn
+    self.limTbx.editingFinished.connect(self.updtRunLim)  #run limit text box edited
+    self.fstBtn.clicked.connect(self.faster) 
+    self.slwBtn.clicked.connect(self.slower) 
+    self.stpBtn.clicked.connect(self.step)   
     self.outBtn.clicked.connect(self.zoomOut)
     self.zInBtn.clicked.connect(self.zoomIn)
     self.dmpBtn.clicked.connect(self.saveState)
@@ -297,17 +297,37 @@ class Window(QWidget):
     self.hideBtn.clicked.connect(self.hideInfo)
     self.showBtn.clicked.connect(self.showInfo)
     self.quitBtn.clicked.connect(self.quit)
+    
+  # "slot" for editingFinished signal on run-limit text box:
+  # -- update run limit from edited contents of the box
+  def updtRunLim(self):
+    try:
+      self.dsp.runLim = int(self.limTbx.text())
+    except ValueError:
+      self.limTbx.setText("{:d}".format(self.dsp.runLim))
+      self.limTbx.setFocus()
+      print("Enter a valid positive integer in the box.")
+      msg = QMessageBox()
+      msg.setText("Enter a valid positive integer in the box.")
+      msg.setStandardButtons(QMessageBox.Retry)
+      x = msg.exec_()
+
 
   # Handle a timer tick by stepping the model and firing a repaint 
   def tick(self):
-    self.dsp.step()
+    if self.dsp.stepCt < self.dsp.runLim:
+      self.dsp.step()
+    else:
+      self.timer.stop()
+      self.dsp.running = False
+      self.rnpBtn.setText("Run to")
     self.stpLbl.setText("{:d}".format(self.dsp.stepCt))
     
-  ## Timer control methods
   def step(self):
     self.dsp.step()
     self.stpLbl.setText("{:d}".format(self.dsp.stepCt))
 
+  ## Timer control methods
   def faster(self):
     i = self.timer.interval()
     if i > 16:
@@ -326,21 +346,11 @@ class Window(QWidget):
     if self.timer.isActive():
       self.timer.stop()
       self.dsp.running = False
-      self.rnpBtn.setText("Run")
+      self.rnpBtn.setText("Run to")
     else:
       self.timer.start()
       self.dsp.running = True
       self.rnpBtn.setText("Pause")
-
-  def longerStep(self):
-    s = self.dsp.kwargs['speed'] * 2.0
-    self.sszLbl.setText("{:.3f}".format(s))
-    self.dsp.kwargs['speed'] = s
-
-  def shorterStep(self):
-    s = self.dsp.kwargs['speed'] / 2.0
-    self.sszLbl.setText("{:.3f}".format(s))
-    self.dsp.kwargs['speed'] = s
 
   ## Zoom control methods
   def zoomOut(self):
@@ -361,6 +371,7 @@ class Window(QWidget):
     self.dsp.update()
     self.scfLbl.setText("{:.1f}".format(self.dsp.scaleFact))
 
+  # persistence
   def saveState(self):
     path, ok = QInputDialog.getText(self, "Save","Path:", QLineEdit.Normal, "")
     if ok and path != '':
@@ -371,8 +382,9 @@ class Window(QWidget):
     if ok and path != '':
       self.dsp.dta = mdl.loadState(path)
       self.dsp.update()    #repaint
-      self.dsp.stepCt = 0  #and reset step count
+      self.dsp.stepCt = 1  #and reset step count
 
+  # Info pane
   def clearInfo(self):
     self.dsp.infoDsp.tArea.setPlainText("");
 
