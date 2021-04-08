@@ -31,6 +31,9 @@ depending on zoom factor.
 The animation mechanism is that a timer tick OR a click on the Step button causes the model's
 d_step function to be invoked (with whatever kwargs have been chosen), then a repaint is scheduled.
 
+Check-boxes give options for
+- coarse or finer grid lines, and
+- lines between agents within cohesion range, in a distinctive colour for pairs of perimeter agents.
 """
 from PyQt5.QtWidgets import QWidget, QApplication, QScrollArea, QPushButton, QMainWindow, QLabel,\
   QHBoxLayout, QVBoxLayout, QFormLayout, QInputDialog, QLineEdit, QPlainTextEdit, QMessageBox, QCheckBox
