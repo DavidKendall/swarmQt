@@ -32,8 +32,8 @@ The animation mechanism is that a timer tick OR a click on the Step button cause
 d_step function to be invoked (with whatever kwargs have been chosen), then a repaint is scheduled.
 
 """
-from PyQt5.QtWidgets import QWidget, QApplication, QScrollArea, QPushButton, QMainWindow,\
-  QLabel, QHBoxLayout, QVBoxLayout, QFormLayout, QInputDialog, QLineEdit, QPlainTextEdit, QMessageBox
+from PyQt5.QtWidgets import QWidget, QApplication, QScrollArea, QPushButton, QMainWindow, QLabel,\
+  QHBoxLayout, QVBoxLayout, QFormLayout, QInputDialog, QLineEdit, QPlainTextEdit, QMessageBox, QCheckBox
 from PyQt5.QtGui import QPainter, QColor, QCursor
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5 import QtCore
@@ -77,6 +77,8 @@ class Display(QWidget):
     self.setMouseTracking(True)
     self.setCursor(QCursor(Qt.CrossCursor))
     self.showCircles = []
+    self.fineGrdOn = False
+    self.showCohOn = False
     self.show()
 
   # Step the model
@@ -147,30 +149,60 @@ class Display(QWidget):
     lh = self.dta.shape[1]
     qp = QPainter()
     qp.begin(self)
-    qp.setPen(Qt.cyan)
-    hw = width//2;    iw = width//20
-    hh = height//2;   ih = height//20
+    hw = width//2;      hh = height//2
+    # fine grid if selected -
+    if self.fineGrdOn: 
+      iw = width//200;    ih = height//200
+      qp.setPen(Qt.lightGray)
+      for i in range(0, hw, iw):
+        qp.drawLine(hw+i,0,hw+i,height)
+        qp.drawLine(hw-i,0,hw-i,height)
+      for i in range(0, hh, ih):
+        qp.drawLine(0,hh+i,width,hh+i)
+        qp.drawLine(0,hh-i,width,hh-i)
+    # coarse grid -
+    iw = width//20;  ih = height//20
+    qp.setPen(Qt.gray)
     for i in range(0, hw, iw):
       qp.drawLine(hw+i,0,hw+i,height)
       qp.drawLine(hw-i,0,hw-i,height)
     for i in range(0, hh, ih):
       qp.drawLine(0,hh+i,width,hh+i)
       qp.drawLine(0,hh-i,width,hh-i)
+    #axes -
     qp.setPen(Qt.blue)
     qp.drawLine(0,hh,width,hh)
     qp.drawLine(hw,0,hw,height)
+    
+    # plot agent positions
     for i in range(lh):
       gx = int((self.dta[mdl.POS_X,i]/self.scaleFact + 0.5)*width)
       gy = int((-self.dta[mdl.POS_Y,i]/self.scaleFact + 0.5)*height)
       qp.setPen(pallette[self.agtClrs[i]])
       qp.drawEllipse(gx-2, gy-2, 4, 4)
       if i in self.showCircles:      
-        rx = int(self.dta[mdl.CF,i]/self.scaleFact*width); ry = int(self.dta[mdl.CF,i]/self.scaleFact*height) 
+        rx = int(self.dta[mdl.CF,i]/self.scaleFact*width);
+        ry = int(self.dta[mdl.CF,i]/self.scaleFact*height) 
         qp.setPen(Qt.darkGreen)
         qp.drawEllipse(gx-rx, gy-ry, 2*rx, 2*ry)  
-        rx = int(self.dta[mdl.RF,i]/self.scaleFact*width); ry = int(self.dta[mdl.RF,i]/self.scaleFact*height) 
+        rx = int(self.dta[mdl.RF,i]/self.scaleFact*width);
+        ry = int(self.dta[mdl.RF,i]/self.scaleFact*height) 
         qp.setPen(Qt.magenta)
         qp.drawEllipse(gx-rx, gy-ry, 2*rx, 2*ry)  
+        
+    if self.showCohOn:
+      for i in range(lh):
+        for j in range(i):
+          if self.mag[i,j] <= self.ecf[i,j] or self.mag[j,i] <= self.ecf[j,i]:
+            if self.dta[mdl.PRM,i] and self.dta[mdl.PRM,j]:
+              qp.setPen(Qt.red)
+            else:
+              qp.setPen(Qt.darkYellow)
+            gx = int((self.dta[mdl.POS_X,i]/self.scaleFact + 0.5)*width)
+            gy = int((-self.dta[mdl.POS_Y,i]/self.scaleFact + 0.5)*height)
+            gX = int((self.dta[mdl.POS_X,j]/self.scaleFact + 0.5)*width)
+            gY = int((-self.dta[mdl.POS_Y,j]/self.scaleFact + 0.5)*height)
+            qp.drawLine(gx, gy, gX, gY)
     qp.end()
 ## 
 ## end of Display class
@@ -242,9 +274,11 @@ class Window(QWidget):
     self.dmpBtn = QPushButton("Dump")
     self.loadBtn = QPushButton("Load")
     self.clrBtn =  QPushButton("Clear Info") 
-    self.hideBtn =  QPushButton("Hide Info") 
-    self.showBtn =  QPushButton("Show Info") 
-    self.quitBtn =  QPushButton("Quit") 
+    self.hideBtn = QPushButton("Hide Info") 
+    self.showBtn = QPushButton("Show Info") 
+    self.fineGrd = QCheckBox("Fine grid")
+    self.showCoh = QCheckBox("Show COH lns")
+    self.quitBtn = QPushButton("Quit") 
 
     self.tmrLbl = QLabel("{:d}".format(self.timer.interval()))
     self.tmrLbl.setAlignment(Qt.AlignCenter)
@@ -268,6 +302,8 @@ class Window(QWidget):
     vbox.addWidget(self.clrBtn)
     vbox.addWidget(self.hideBtn)
     vbox.addWidget(self.showBtn)
+    vbox.addWidget(self.fineGrd)
+    vbox.addWidget(self.showCoh)
     vbox.addWidget(self.quitBtn)
     vbox.addStretch(1)
     
@@ -296,6 +332,8 @@ class Window(QWidget):
     self.clrBtn.clicked.connect(self.clearInfo)
     self.hideBtn.clicked.connect(self.hideInfo)
     self.showBtn.clicked.connect(self.showInfo)
+    self.fineGrd.clicked.connect(self.toggle)
+    self.showCoh.clicked.connect(self.toggle)
     self.quitBtn.clicked.connect(self.quit)
     
   # "slot" for editingFinished signal on run-limit text box:
@@ -394,6 +432,12 @@ class Window(QWidget):
   def showInfo(self):
     self.dsp.infoDsp.show()
 
+  # Pass grid, cohesion lines options to display window
+  def toggle(self):
+    self.dsp.fineGrdOn = self.fineGrd.isChecked()
+    self.dsp.showCohOn = self.showCoh.isChecked()
+    self.dsp.update()
+    
   def quit(self):
    self.dsp.infoDsp.close()
    self.close()
