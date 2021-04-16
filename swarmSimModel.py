@@ -16,6 +16,9 @@ swarmSimModel.py - 2020 Aug 13
      resultant movement.
  - d-step and all its helpers are decorated with numba @jit decorations to boost performance
 """
+
+# Common initialisation, constants, etc.
+
 import numpy as np
 
 # Define some useful array accessor constants
@@ -36,11 +39,14 @@ RF     = 13   # repulsion field radii
 KC     = 14   # cohesion vector scaling factor
 KR     = 15   # repulsion vector scaling factor
 KD     = 16   # direction vector scaling factor
-PRM    = 17   # if True agent known to be on perimeter of swarm
-COH_N  = 18   # number of cohesion neighbours
-REP_N  = 19   # number of repulsion neighbours
+KG     = 17   # gap reduction scaling factor
+PRM    = 18   # if True agent known to be on perimeter of swarm
+GAP_X  = 19   # x-coordinates of vector for gap reduction
+GAP_Y  = 20   # y-ccordinates of vector for gap reduction
+COH_N  = 21   # number of cohesion neighbours
+REP_N  = 22   # number of repulsion neighbours
 
-N_ROWS = 20   # number of rows in array that models swarm state
+N_ROWS = 23   # number of rows in array that models swarm state
 eps    = np.finfo('float64').eps # smallest positive 64 bit float value
 
 default_swarm_params = {
@@ -60,7 +66,7 @@ default_swarm_params = {
     'pr' : 1.0
 }
 
-def mk_rand_swarm(n, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, goal=[[0.0], [0.0]], loc=0.0, grid=10, seed=None):
+def mk_rand_swarm(n, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, kg=0.0, goal=[[0.0], [0.0]], loc=0.0, grid=10, seed=None):
     '''
     create a 2-D array of N_ROWS attributes for n agents.
 
@@ -70,6 +76,7 @@ def mk_rand_swarm(n, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, goal=[[0.0], [0.
     :param kc:     weighting factor for cohesion component, default 1.0
     :param kr:     weighting factor for repulsion component, default 1.0
     :param kd:     weighting factor for direction component, default 0.0 (i.e. goal is ignored by default)
+    :param kg:     weighting factor for gap reduction, default 0.0 (i.e. no gap reduction by default)
     :param goal:   location of a goal for all agents; heterogeneous goals are allowed but not catered for here
     :param loc:    location of agent b_0 -- the focus of the swarm
     :param grid:   size of grid around b_0 in which all other agents will be placed initially at random
@@ -88,12 +95,14 @@ def mk_rand_swarm(n, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, goal=[[0.0], [0.
     b[KC,:] = kc                                    # cohesion weight for all agents set to kc
     b[KR,:] = kr                                    # repulsion weight for all agents set to kr
     b[KD,:] = kd                                    # direction weight for all agents set to kd
+    b[KG,:] = kg                                    # gap reduction weight for all agents set to kg
     b[PRM,:] = False                                # initially no agents known to be on perimeter
+    b[GAP_X:GAP_Y+1,:] = 0.                         # gap vectors initially [0.0, 0.0]
     b[COH_N,:] = 0.                                 # initially no cohesion neighbours
     b[REP_N,:] = 0.                                 # initially no repulsion neighbours
     return b
 
-def mk_swarm(xs, ys, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, goal=[[0.0], [0.0]]):
+def mk_swarm(xs, ys, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, kg=0.0, goal=[[0.0], [0.0]]):
     '''
     create a 2-D array of N_ROWS attributes for len(xs) agents.
 
@@ -121,10 +130,14 @@ def mk_swarm(xs, ys, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, goal=[[0.0], [0.
     b[KC,:] = kc                                    # cohesion weight for all agents set to kc
     b[KR,:] = kr                                    # repulsion weight for all agents set to kr
     b[KD,:] = kd                                    # direction weight for all agents set to kd
+    b[KG,:] = kg                                    # gap reduction weight for all agents set to kg
     b[PRM,:] = False                                # initially no agents known to be on perimeter
+    b[GAP_X:GAP_Y+1,:] = 0.                         # gap vectors initially [0.0, 0.0]
     b[COH_N,:] = 0.                                 # initially no cohesion neighbours
     b[REP_N,:] = 0.                                 # initially no repulsion neighbours
     return b
+
+
 
 # Numba-accelerated simulator
 
@@ -171,12 +184,15 @@ def nbr_sort(a, ang, i):
         if jmin != j:
             a[jmin], a[j] = a[j], a[jmin]
 
+
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
 def onPerim(b, xv, yv, mag, ecb):
     n_agents = b.shape[1]
     result = np.full(n_agents, False)
     ang = np.arctan2(yv, xv)                    # all pairs polar angles
     for i in prange(n_agents):
+        b[GAP_X][i] = 0.
+        b[GAP_Y][i] = 0.
         if b[COH_N][i] < 3:
             result[i] = True
             continue
@@ -191,17 +207,25 @@ def onPerim(b, xv, yv, mag, ecb):
             k = (j + 1) % int(b[COH_N][i])
             if mag[nbrs[k],nbrs[j]] > ecb[nbrs[k],nbrs[j]]:    # nbrs[j] and nbrs[k] are not cohesion neighbours
                 result[i] = True
+                # compute the gap vector in case of gap reduction
+                b[GAP_X][i] += (b[KG][i] * ((0.5 * (b[POS_X][nbrs[k]] + b[POS_X][nbrs[j]])) - b[POS_X][i])) 
+                b[GAP_Y][i] += (b[KG][i] * ((0.5 * (b[POS_Y][nbrs[k]] + b[POS_Y][nbrs[j]])) - b[POS_Y][i]))
                 break
-            delta = ang[:,i][nbrs[k]] - ang[:,i][nbrs[j]]
-            if (delta < 0):
-                delta += np.pi * 2.0;
-            if (delta > np.pi):
-                result[i] = True;
-                break;
+            else:
+                delta = ang[:,i][nbrs[k]] - ang[:,i][nbrs[j]]
+                if (delta < 0):
+                    delta += np.pi * 2.0;
+                if (delta > np.pi):
+                    result[i] = True;
+                    # compute the gap vector in case of gap reduction
+                    b[GAP_X][i] += (b[KG][i] * ((0.5 * (b[POS_X][nbrs[k]] + b[POS_X][nbrs[j]])) - b[POS_X][i])) 
+                    b[GAP_Y][i] += (b[KG][i] * ((0.5 * (b[POS_Y][nbrs[k]] + b[POS_Y][nbrs[j]])) - b[POS_Y][i]))
+                    break
     return result, ang
 
+
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
-def compute_erf(b, cscale, rscale):
+def compute_erf(b, cscale, rscale, krscale):
     n_agents = b.shape[1]
     erf = np.empty((n_agents, n_agents))
     ekc = np.empty((n_agents, n_agents))
@@ -211,7 +235,11 @@ def compute_erf(b, cscale, rscale):
             if b[PRM][i] and b[PRM][j]:
                 erf[i,j] = b[RF][i] * rscale
                 ekc[i,j] = b[KC][i] * cscale
-                ekr[i,j] = b[KR][i]
+                ekr[i,j] = b[KR][i] 
+            elif b[PRM][i]:
+                erf[i,j] = b[RF][i]
+                ekc[i,j] = b[KC][i]
+                ekr[i,j] = b[KR][i] * krscale
             else:
                 erf[i,j] = b[RF][i]
                 ekc[i,j] = b[KC][i]
@@ -269,7 +297,7 @@ def update_resultant(b, stability_factor, speed):
             b[RES_X][i] = 0.0
             b[RES_Y][i] = 0.0
 
-def compute_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perim_coord=False, stability_factor=0.0, pc=1.0, pr=1.0):
+def compute_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perim_coord=False, stability_factor=0.0, pc=1.0, pr=1.0, pkr=1.0):
     """
     Compute one step in the evolution of swarm `b`, update the COH, REP, DIR and RES fields
     :param b: the array modelling the state of the swarm
@@ -294,7 +322,7 @@ def compute_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perim_coord=F
     b[PRM], ang = onPerim(b, xv, yv, mag, ecb)
 
    # compute the effective repulsion field, cohesion weight and repulsion weight
-    erf, ekc, ekr = compute_erf(b, pc, pr)
+    erf, ekc, ekr = compute_erf(b, pc, pr, pkr)
 
     # compute the cohesion vectors
     compute_coh(b, xv, yv, mag, ecb, ekc)
@@ -466,7 +494,7 @@ def load_swarm(path='swarm.json'):
         swarm_args['goal'] = [[0.0],[0.0]]
     else:
         swarm_args['goal'] = np.array(state['destinations']['coords'])[:2,0].reshape(2,1).tolist()
-    step_args = {k:v for k,v in state['params'].items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'pc', 'pr']} 
+    step_args = {k:v for k,v in state['params'].items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'pc', 'pr', 'pkr']} 
     b = mk_swarm(state['agents']['coords'][0], state['agents']['coords'][1], **swarm_args)
     goal = state['destinations']['coords'][:][0]
     return b, swarm_args, step_args
