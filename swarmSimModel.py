@@ -63,7 +63,8 @@ default_swarm_params = {
     'speed' : 0.05,
     'stability_factor' : 0.0,
     'pc' : 1.0,
-    'pr' : 1.0
+    'pr' : 1.0,
+    'pkr': 1.0
 }
 
 def mk_rand_swarm(n, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, kg=0.0, goal=[[0.0], [0.0]], loc=0.0, grid=10, seed=None):
@@ -318,7 +319,7 @@ def compute_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perim_coord=F
     mag = np.empty((n_agents, n_agents))
     all_pairs_mag(b, xv, yv, mag, ecb)
 
-    # compute the perimeter
+    # compute the perimeter, including gap vectors for gap reduction
     b[PRM], ang = onPerim(b, xv, yv, mag, ecb)
 
    # compute the effective repulsion field, cohesion weight and repulsion weight
@@ -344,9 +345,8 @@ def compute_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perim_coord=F
 
     # compute the resultant of the cohesion, repulsion and direction vectors
     if perim_coord:
-        b[RES_X:RES_Y+1] = b[COH_X:COH_Y+1] + b[REP_X:REP_Y+1] + b[PRM] * b[DIR_X:DIR_Y+1]
-    else:
-        b[RES_X:RES_Y+1] = b[COH_X:COH_Y+1] + b[REP_X:REP_Y+1] + b[DIR_X:DIR_Y+1]
+        b[DIR_X:DIR_Y+1] *= b[PRM]
+    b[RES_X:RES_Y+1] = b[COH_X:COH_Y+1] + b[GAP_X:GAP_Y+1] + b[REP_X:REP_Y+1] + b[DIR_X:DIR_Y+1]
 
     # normalise the resultant and update for speed, adjusted for stability
     update_resultant(b, stability_factor, speed)
@@ -360,8 +360,8 @@ def apply_step(b):
     b[POS_X:POS_Y+1] += b[RES_X:RES_Y+1]
     np.around(b[POS_X:POS_Y+1], 9, out=b[POS_X:POS_Y+1])
     
-def d_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perim_coord=False, stability_factor=0.0, pc=1.0, pr=1.0):
-    xv,yv,mag,ang,ecf,erf,ekc,ekr = compute_step(b, scaling=scaling, exp_rate=exp_rate, speed=speed, perim_coord=perim_coord, stability_factor=stability_factor, pc=pc, pr=pr)
+def d_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perim_coord=False, stability_factor=0.0, pc=1.0, pr=1.0, pkr=1.0):
+    xv,yv,mag,ang,ecf,erf,ekc,ekr = compute_step(b, scaling=scaling, exp_rate=exp_rate, speed=speed, perim_coord=perim_coord, stability_factor=stability_factor, pc=pc, pr=pr, pkr=pkr)
     apply_step(b)
     return xv,yv,mag,ang,ecf,erf,ekc,ekr
 
@@ -453,7 +453,7 @@ def readCoords(path):
 
 def dump_swarm(b, swarm_args, step_args, path='swarm.json'):
     goal = swarm_args['goal']
-    swarm_args = {k:v for k,v in swarm_args.items() if k in ['cb', 'rb', 'kc', 'kr', 'kd']}
+    swarm_args = {k:v for k,v in swarm_args.items() if k in ['cb', 'rb', 'kc', 'kr', 'kd', 'kg']}
     coords = b[POS_X:POS_Y+1,:].tolist()
     coords.append([0.0] * b.shape[1])
     state = {
@@ -468,7 +468,7 @@ def dump_swarm(b, swarm_args, step_args, path='swarm.json'):
 
 def dump_swarm_txt(b, swarm_args, step_args, path='swarm.txt'):
     goal = swarm_args['goal']
-    swarm_args = {k:v for k,v in swarm_args.items() if k in ['cb', 'rb', 'kc', 'kr', 'kd']}
+    swarm_args = {k:v for k,v in swarm_args.items() if k in ['cb', 'rb', 'kc', 'kr', 'kd', 'kg']}
     coords = b[POS_X:POS_Y+1,:].tolist()
     coords.append([0.0] * b.shape[1])
     state = {
@@ -489,7 +489,7 @@ def load_swarm(path='swarm.json'):
     with open(path, 'r') as f:
         state = json.load(f)
         f.close()
-    swarm_args = {k:v for k,v in state['params'].items() if k in ['cb', 'rb', 'kc', 'kr', 'kd']}
+    swarm_args = {k:v for k,v in state['params'].items() if k in ['cb', 'rb', 'kc', 'kr', 'kd', 'kg']}
     if state['destinations']['coords'] == [[],[],[]]:
         swarm_args['goal'] = [[0.0],[0.0]]
     else:
