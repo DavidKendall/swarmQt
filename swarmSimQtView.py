@@ -453,7 +453,7 @@ Run the QtView
 '''
 def runQtView(args):
   swarm_args = {k:v for k,v in args.items() if k in ['random', 'load_state', 'read_coords', 'cf', 'rf', 'kc', 'kr', 'kd', 'goal', 'loc', 'grid', 'seed'] and v is not None}
-  step_args = {k:v for k,v in args.items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'pc', 'pr'] and v is not None} 
+  step_args = {k:v for k,v in args.items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'pc', 'pr', 'pkr'] and v is not None} 
   if 'random' in swarm_args.keys():
     n = swarm_args['random']
     goal = json.loads(swarm_args['goal'])
@@ -496,6 +496,7 @@ parser.add_argument('--perim_coord', action='store_true', help='use only perimet
 parser.add_argument('--stability_factor', type=float, help='constrain agent movement if magnitude of resultant vector is less than STABILITY_FACTOR * speed')
 parser.add_argument('--pc', type=float, help='multiply cohesion weight by PC (>= 1.0) for perimeter agents')
 parser.add_argument('--pr', type=float, help='multiply repulsion field radius by PR (0 < PR <= 1.0) for perimeter agents')
+parser.add_argument('--pkr', type=float, help='multiply repulsion weight by PKR for perimeter -> internal agents')
 args = vars(parser.parse_args())
 runQtView(args)
 

@@ -209,7 +209,7 @@ def onPerim(b, xv, yv, mag, ecb):
             if mag[nbrs[k],nbrs[j]] > ecb[nbrs[k],nbrs[j]]:    # nbrs[j] and nbrs[k] are not cohesion neighbours
                 result[i] = True
                 # compute the gap vector in case of gap reduction
-                b[GAP_X][i] += (b[KG][i] * ((0.5 * (b[POS_X][nbrs[k]] + b[POS_X][nbrs[j]])) - b[POS_X][i])) 
+                b[GAP_X][i] += (b[KG][i] * ((0.5 * (b[POS_X][nbrs[k]] + b[POS_X][nbrs[j]])) - b[POS_X][i]))
                 b[GAP_Y][i] += (b[KG][i] * ((0.5 * (b[POS_Y][nbrs[k]] + b[POS_Y][nbrs[j]])) - b[POS_Y][i]))
                 break
             else:
@@ -219,7 +219,7 @@ def onPerim(b, xv, yv, mag, ecb):
                 if (delta > np.pi):
                     result[i] = True;
                     # compute the gap vector in case of gap reduction
-                    b[GAP_X][i] += (b[KG][i] * ((0.5 * (b[POS_X][nbrs[k]] + b[POS_X][nbrs[j]])) - b[POS_X][i])) 
+                    b[GAP_X][i] += (b[KG][i] * ((0.5 * (b[POS_X][nbrs[k]] + b[POS_X][nbrs[j]])) - b[POS_X][i]))
                     b[GAP_Y][i] += (b[KG][i] * ((0.5 * (b[POS_Y][nbrs[k]] + b[POS_Y][nbrs[j]])) - b[POS_Y][i]))
                     break
     return result, ang
@@ -236,7 +236,7 @@ def compute_erf(b, cscale, rscale, krscale):
             if b[PRM][i] and b[PRM][j]:
                 erf[i,j] = b[RF][i] * rscale
                 ekc[i,j] = b[KC][i] * cscale
-                ekr[i,j] = b[KR][i] 
+                ekr[i,j] = b[KR][i]
             elif b[PRM][i]:
                 erf[i,j] = b[RF][i]
                 ekc[i,j] = b[KC][i]
@@ -359,7 +359,7 @@ def apply_step(b):
     """
     b[POS_X:POS_Y+1] += b[RES_X:RES_Y+1]
     np.around(b[POS_X:POS_Y+1], 9, out=b[POS_X:POS_Y+1])
-    
+
 def d_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perim_coord=False, stability_factor=0.0, pc=1.0, pr=1.0, pkr=1.0):
     xv,yv,mag,ang,ecf,erf,ekc,ekr = compute_step(b, scaling=scaling, exp_rate=exp_rate, speed=speed, perim_coord=perim_coord, stability_factor=stability_factor, pc=pc, pr=pr, pkr=pkr)
     apply_step(b)
@@ -458,9 +458,9 @@ def dump_swarm(b, swarm_args, step_args, path='swarm.json'):
     coords.append([0.0] * b.shape[1])
     state = {
         'params': {**default_swarm_params, **swarm_args, **step_args},
-        'agents': {'coords': coords}, 
+        'agents': {'coords': coords},
         'destinations' : {'coords': [goal[0], goal[1], [0.0]]},
-        'obstacles' : {'coords': [[],[],[]]} 
+        'obstacles' : {'coords': [[],[],[]]}
     }
     with open(path, 'w') as f:
         json.dump(state, f, indent=4)
@@ -473,9 +473,9 @@ def dump_swarm_txt(b, swarm_args, step_args, path='swarm.txt'):
     coords.append([0.0] * b.shape[1])
     state = {
         'params': {**default_swarm_params, **swarm_args, **step_args},
-        'agents': {'coords': coords}, 
+        'agents': {'coords': coords},
         'destinations' : {'coords': [goal[0], goal[1], [0.0]]},
-        'obstacles' : {'coords': [[],[],[]]} 
+        'obstacles' : {'coords': [[],[],[]]}
     }
     with open(path, 'w') as f:
         for item in state['params'].items():
@@ -494,7 +494,7 @@ def load_swarm(path='swarm.json'):
         swarm_args['goal'] = [[0.0],[0.0]]
     else:
         swarm_args['goal'] = np.array(state['destinations']['coords'])[:2,0].reshape(2,1).tolist()
-    step_args = {k:v for k,v in state['params'].items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'pc', 'pr', 'pkr']} 
+    step_args = {k:v for k,v in state['params'].items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'pc', 'pr', 'pkr']}
     b = mk_swarm(state['agents']['coords'][0], state['agents']['coords'][1], **swarm_args)
     goal = state['destinations']['coords'][:][0]
     return b, swarm_args, step_args
@@ -502,7 +502,7 @@ def load_swarm(path='swarm.json'):
 def run_simulation(b, *, with_perimeter=False, step=d_step, **kwargs):
     """
     run a simulation of the `step()` function in a simple graphical environment
-    
+
     :param b: the array modelling the state of the swarm
     :param with_perimeter: if True, distinguish between perimeter and internal agents
     :param step: the step function
@@ -512,7 +512,7 @@ def run_simulation(b, *, with_perimeter=False, step=d_step, **kwargs):
 
     def simulate(i):
         """
-        Ultra-simple simulation function  
+        Ultra-simple simulation function
         """
         ax.cla()                                                # clear the axes
         ax.set(xlim=(-15, 15), ylim=(-15, 15))                  # set the limits of the axes
@@ -527,7 +527,7 @@ def run_simulation(b, *, with_perimeter=False, step=d_step, **kwargs):
 
     def init():
         return []
-    
+
     # return a function that calls `simulate` every 100 ms and updates the figure
     return FuncAnimation(fig, simulate, interval=100, init_func=init)
 
@@ -567,9 +567,9 @@ def log_experiment(config_file='swarm.json', n_steps=300, verbose=False, csv_fil
                 f.write(f"{b[POS_X,agent]},{b[POS_Y,agent]},{b[COH_X,agent]},{b[COH_Y,agent]},{b[REP_X,agent]},{b[REP_Y,agent]},"
                         f"{b[DIR_X,agent]},{b[DIR_Y,agent]},{b[RES_X,agent]},{b[RES_Y,agent]},{b[GOAL_X,agent]},{b[GOAL_Y,agent]},"
                         f"{b[CF,agent]},{b[RF,agent]},{b[KC,agent]},{b[KR,agent]},{b[KD,agent]},{b[PRM,agent].astype(bool)},"
-                        f"{b[COH_N,agent]},{b[REP_N,agent]}\n")      
-    f.close()   
-    
+                        f"{b[COH_N,agent]},{b[REP_N,agent]}\n")
+    f.close()
+
 def check_steps(b1, step_args, n_steps=300, eps=10.0 ** -9):
     b2 = np.copy(b1)
     if np.count_nonzero(np.abs(b1 - b2) <= eps) != b1.size:
