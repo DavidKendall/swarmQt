@@ -452,7 +452,7 @@ Run the QtView
 :args: a list of command-line arguments created by argparse
 '''
 def runQtView(args):
-  swarm_args = {k:v for k,v in args.items() if k in ['random', 'load_state', 'read_coords', 'cf', 'rf', 'kc', 'kr', 'kd', 'goal', 'loc', 'grid', 'seed'] and v is not None}
+  swarm_args = {k:v for k,v in args.items() if k in ['random', 'load_state', 'read_coords', 'cf', 'rf', 'kc', 'kr', 'kd', 'kg', 'goal', 'loc', 'grid', 'seed'] and v is not None}
   step_args = {k:v for k,v in args.items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'pc', 'pr', 'pkr'] and v is not None} 
   if 'random' in swarm_args.keys():
     n = swarm_args['random']
@@ -485,6 +485,7 @@ parser.add_argument('--rb', type=float, help='radius of the repulsion field')
 parser.add_argument('--kc', type=float, help='weight of the cohesion vector')
 parser.add_argument('--kr', type=float, help='weight of the repulsion vector')
 parser.add_argument('--kd', type=float, help='weight of the direction vector')
+parser.add_argument('--kg', type=float, help='weight of the gap reduction vector')
 parser.add_argument('--goal', default='[0.0, 0.0]', help='GOAL should be a string like "[10.0, 15.5]"')
 parser.add_argument('--loc', type=float, help='initially centre of the swarm is at coordinates (LOC, LOC)')
 parser.add_argument('--grid', type=float, help='initially swarms is distributed in an area of 2.GRID x 2.GRID')

@@ -236,10 +236,10 @@ def compute_erf(b, cscale, rscale, krscale):
             if b[PRM][i] and b[PRM][j]:
                 erf[i,j] = b[RF][i] * rscale
                 ekc[i,j] = b[KC][i] * cscale
-                ekr[i,j] = b[KR][i]
+                ekr[i,j] = b[KR][i] 
             elif b[PRM][i]:
-                erf[i,j] = b[RF][i]
-                ekc[i,j] = b[KC][i]
+                erf[i,j] = b[RF][i] 
+                ekc[i,j] = b[KC][i] 
                 ekr[i,j] = b[KR][i] * krscale
             else:
                 erf[i,j] = b[RF][i]
