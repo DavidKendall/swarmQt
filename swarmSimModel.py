@@ -139,6 +139,18 @@ def mk_swarm(xs, ys, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, kg=0.0, goal=[[0
     return b
 
 
+# Display string for attribute values in column i of b
+def attributeString(b, i):
+  stg  = "POS_X = {:.10f}, POS_Y = {:.10f}, PRM = {:.10f}\n".format(b[POS_X][i], b[POS_Y][i], b[PRM][i])
+  stg += "COH_X = {:.10f}, COH_Y = {:.10f}, COH_N = {:.10f}\n".format(b[COH_X][i], b[COH_Y][i], b[COH_N][i])
+  stg += "REP_X = {:.10f}, REP_Y = {:.10f}, REP_N = {:.10f}\n".format(b[REP_X][i], b[REP_Y][i], b[REP_N][i])
+  stg += "GAP_X = {:.10f}, GAP_Y = {:.10f}, ".format(b[GAP_X][i], b[GAP_Y][i])
+  stg += "DIR_X = {:.10f}, DIR_Y = {:.10f}\n".format(b[DIR_X][i], b[DIR_Y][i])
+  stg += "RES_X = {:.10f}, RES_Y = {:.10f}, ".format(b[RES_X][i], b[RES_Y][i])
+  stg += "GOAL_X = {:.10f}, GOAL_Y = {:.10f}\n".format(b[GOAL_X][i], b[GOAL_Y][i])
+  stg += "CF = {:.10f}, RF = {:.10f}, KC = {:.10f}\n".format(b[CF][i], b[RF][i], b[KC][i])
+  stg += "KR = {:.10f}, KD = {:.10f}, KG = {:.10f}\n".format(b[KR][i], b[KD][i], b[KG][i])
+  return stg
 
 # Numba-accelerated simulator
 
