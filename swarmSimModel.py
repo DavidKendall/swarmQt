@@ -171,8 +171,8 @@ def compute_coh(b, xv, yv, mag, ecb, ekc):
         b[COH_Y][i] = 0.0
         for j in range(n_agents):
             if j != i and mag[j, i] <= ecb[j, i]:
-                b[COH_X][i] = b[COH_X][i] + (xv[j,i] * ekc[j,i])
-                b[COH_Y][i] = b[COH_Y][i] + (yv[j,i] * ekc[j,i])
+                b[COH_X][i] = b[COH_X][i] + (xv[j,i] * ekc[i,j])
+                b[COH_Y][i] = b[COH_Y][i] + (yv[j,i] * ekc[i,j])
 
 @jit(nopython=True, fastmath=True, cache=True)
 def nbr_sort(a, ang, i):
@@ -237,7 +237,7 @@ def compute_erf(b, cscale, rscale, krscale):
                 erf[i,j] = b[RF][i] * rscale
                 ekc[i,j] = b[KC][i] * cscale
                 ekr[i,j] = b[KR][i] 
-            elif b[PRM][i]:
+            elif not b[PRM][i]:
                 erf[i,j] = b[RF][i] 
                 ekc[i,j] = b[KC][i] 
                 ekr[i,j] = b[KR][i] * krscale
@@ -257,8 +257,8 @@ def compute_rep_linear(b, xv, yv, mag, erf, ekr):
         for j in range(n_agents):
             if j != i and mag[j, i] <= erf[i,j]:
                 b[REP_N][i] = b[REP_N][i] + 1
-                b[REP_X][i] = b[REP_X][i] + (1. - (erf[i,j] / mag[j,i])) * xv[j,i] * ekr[j,i]
-                b[REP_Y][i] = b[REP_Y][i] + (1. - (erf[i,j] / mag[j,i])) * yv[j,i] * ekr[j,i]
+                b[REP_X][i] = b[REP_X][i] + (1. - (erf[i,j] / mag[j,i])) * xv[j,i] * ekr[i,j]
+                b[REP_Y][i] = b[REP_Y][i] + (1. - (erf[i,j] / mag[j,i])) * yv[j,i] * ekr[i,j]
 
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
 def compute_rep_quadratic(b, xv, yv, mag, erf, ekr):
@@ -270,8 +270,8 @@ def compute_rep_quadratic(b, xv, yv, mag, erf, ekr):
         for j in range(n_agents):
             if j != i and mag[j, i] <= erf[i,j]:
                 b[REP_N][i] = b[REP_N][i] + 1
-                b[REP_X][i] = b[REP_X][i] + (-erf[i,j] * (mag[j,i] ** -2) * (xv[j,i] / mag[j,i]) * ekr[j,i])
-                b[REP_Y][i] = b[REP_Y][i] + (-erf[i,j] * (mag[j,i] ** -2) * (yv[j,i] / mag[j,i]) * ekr[j,i])
+                b[REP_X][i] = b[REP_X][i] + (-erf[i,j] * (mag[j,i] ** -2) * (xv[j,i] / mag[j,i]) * ekr[i,j])
+                b[REP_Y][i] = b[REP_Y][i] + (-erf[i,j] * (mag[j,i] ** -2) * (yv[j,i] / mag[j,i]) * ekr[i,j])
 
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
 def compute_rep_exponential(b, xv, yv, mag, erf, ekr, exp_rate):
