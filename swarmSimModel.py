@@ -250,10 +250,7 @@ def compute_erf(b, compression, cscale, rscale, krscale):
                 erf[i,j] = b[RF][i] * rscale
                 ekc[i,j] = b[KC][i] * cscale
                 ekr[i,j] = b[KR][i]
-            # elif np.logical_xor(b[PRM][i], b[PRM][j]):
-            # elif (compression == 1 and np.logical_xor(b[PRM][i],b[PRM][j])) or (compression == 2 and b[PRM][j]):
             elif (b[PRM][i] and compression == 1) or (b[PRM][j] and compression == 2):
-            # elif b[PRM][i] or b[PRM][j]:
                 erf[i,j] = b[RF][i]
                 ekc[i,j] = b[KC][i]
                 ekr[i,j] = b[KR][i] * krscale
