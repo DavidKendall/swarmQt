@@ -62,6 +62,7 @@ default_swarm_params = {
     'exp_rate' : 0.2,
     'speed' : 0.05,
     'stability_factor' : 0.0,
+    'compression' : 0,
     'pc' : 1.0,
     'pr' : 1.0,
     'pkr': 1.0
@@ -171,8 +172,8 @@ def compute_coh(b, xv, yv, mag, ecb, ekc):
         b[COH_Y][i] = 0.0
         for j in range(n_agents):
             if j != i and mag[j, i] <= ecb[j, i]:
-                b[COH_X][i] = b[COH_X][i] + (xv[j,i] * ekc[j,i])
-                b[COH_Y][i] = b[COH_Y][i] + (yv[j,i] * ekc[j,i])
+                b[COH_X][i] = b[COH_X][i] + (xv[j,i] * ekc[i,j])
+                b[COH_Y][i] = b[COH_Y][i] + (yv[j,i] * ekc[i,j])
 
 @jit(nopython=True, fastmath=True, cache=True)
 def nbr_sort(a, ang, i):
@@ -200,7 +201,7 @@ def onPerim(b, xv, yv, mag, ecb):
         nbrs = np.full(int(b[COH_N][i]), 0)
         k = 0
         for j in range(n_agents):
-            if j != i and mag[j, i] <= ecb[j, i]:
+            if j != i and mag[j, i] <= ecb[i, j]:
                 nbrs[k] = j
                 k += 1
         nbr_sort(nbrs, ang, i)
@@ -226,7 +227,7 @@ def onPerim(b, xv, yv, mag, ecb):
 
 
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
-def compute_erf(b, cscale, rscale, krscale):
+def compute_erf(b, compression, cscale, rscale, krscale):
     n_agents = b.shape[1]
     erf = np.empty((n_agents, n_agents))
     ekc = np.empty((n_agents, n_agents))
@@ -236,10 +237,13 @@ def compute_erf(b, cscale, rscale, krscale):
             if b[PRM][i] and b[PRM][j]:
                 erf[i,j] = b[RF][i] * rscale
                 ekc[i,j] = b[KC][i] * cscale
-                ekr[i,j] = b[KR][i] 
-            elif b[PRM][i]:
-                erf[i,j] = b[RF][i] 
-                ekc[i,j] = b[KC][i] 
+                ekr[i,j] = b[KR][i]
+            # elif np.logical_xor(b[PRM][i], b[PRM][j]):
+            # elif (compression == 1 and np.logical_xor(b[PRM][i],b[PRM][j])) or (compression == 2 and b[PRM][j]):
+            elif (b[PRM][i] and compression == 1) or (b[PRM][j] and compression == 2):
+            # elif b[PRM][i] or b[PRM][j]:
+                erf[i,j] = b[RF][i]
+                ekc[i,j] = b[KC][i]
                 ekr[i,j] = b[KR][i] * krscale
             else:
                 erf[i,j] = b[RF][i]
@@ -257,8 +261,8 @@ def compute_rep_linear(b, xv, yv, mag, erf, ekr):
         for j in range(n_agents):
             if j != i and mag[j, i] <= erf[i,j]:
                 b[REP_N][i] = b[REP_N][i] + 1
-                b[REP_X][i] = b[REP_X][i] + (1. - (erf[i,j] / mag[j,i])) * xv[j,i] * ekr[j,i]
-                b[REP_Y][i] = b[REP_Y][i] + (1. - (erf[i,j] / mag[j,i])) * yv[j,i] * ekr[j,i]
+                b[REP_X][i] = b[REP_X][i] + (1. - (erf[i,j] / mag[j,i])) * xv[j,i] * ekr[i,j]
+                b[REP_Y][i] = b[REP_Y][i] + (1. - (erf[i,j] / mag[j,i])) * yv[j,i] * ekr[i,j]
 
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
 def compute_rep_quadratic(b, xv, yv, mag, erf, ekr):
@@ -270,8 +274,8 @@ def compute_rep_quadratic(b, xv, yv, mag, erf, ekr):
         for j in range(n_agents):
             if j != i and mag[j, i] <= erf[i,j]:
                 b[REP_N][i] = b[REP_N][i] + 1
-                b[REP_X][i] = b[REP_X][i] + (-erf[i,j] * (mag[j,i] ** -2) * (xv[j,i] / mag[j,i]) * ekr[j,i])
-                b[REP_Y][i] = b[REP_Y][i] + (-erf[i,j] * (mag[j,i] ** -2) * (yv[j,i] / mag[j,i]) * ekr[j,i])
+                b[REP_X][i] = b[REP_X][i] + (-erf[i,j] * (mag[j,i] ** -2) * (xv[j,i] / mag[j,i]) * ekr[i,j])
+                b[REP_Y][i] = b[REP_Y][i] + (-erf[i,j] * (mag[j,i] ** -2) * (yv[j,i] / mag[j,i]) * ekr[i,j])
 
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
 def compute_rep_exponential(b, xv, yv, mag, erf, ekr, exp_rate):
@@ -283,8 +287,8 @@ def compute_rep_exponential(b, xv, yv, mag, erf, ekr, exp_rate):
         for j in range(n_agents):
             if j != i and mag[j, i] <= erf[i,j]:
                 b[REP_N][i] = b[REP_N][i] + 1
-                b[REP_X][i] = b[REP_X][i] + (-erf[i,j] * (np.e ** (-mag[j,i] * exp_rate)) * (xv[j,i] / mag[j,i]) * ekr[j,i])
-                b[REP_Y][i] = b[REP_Y][i] + (-erf[i,j] * (np.e ** (-mag[j,i] * exp_rate)) * (yv[j,i] / mag[j,i]) * ekr[j,i])
+                b[REP_X][i] = b[REP_X][i] + (-erf[i,j] * (np.e ** (-mag[j,i] * exp_rate)) * (xv[j,i] / mag[j,i]) * ekr[i,j])
+                b[REP_Y][i] = b[REP_Y][i] + (-erf[i,j] * (np.e ** (-mag[j,i] * exp_rate)) * (yv[j,i] / mag[j,i]) * ekr[i,j])
 
 @jit(nopython=True, fastmath=True, cache=True)
 def update_resultant(b, stability_factor, speed):
@@ -298,7 +302,7 @@ def update_resultant(b, stability_factor, speed):
             b[RES_X][i] = 0.0
             b[RES_Y][i] = 0.0
 
-def compute_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perim_coord=False, stability_factor=0.0, pc=1.0, pr=1.0, pkr=1.0):
+def compute_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perim_coord=False, stability_factor=0.0, compression=0, pc=1.0, pr=1.0, pkr=1.0):
     """
     Compute one step in the evolution of swarm `b`, update the COH, REP, DIR and RES fields
     :param b: the array modelling the state of the swarm
@@ -323,7 +327,7 @@ def compute_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perim_coord=F
     b[PRM], ang = onPerim(b, xv, yv, mag, ecb)
 
    # compute the effective repulsion field, cohesion weight and repulsion weight
-    erf, ekc, ekr = compute_erf(b, pc, pr, pkr)
+    erf, ekc, ekr = compute_erf(b, compression, pc, pr, pkr)
 
     # compute the cohesion vectors
     compute_coh(b, xv, yv, mag, ecb, ekc)
@@ -494,7 +498,7 @@ def load_swarm(path='swarm.json'):
         swarm_args['goal'] = [[0.0],[0.0]]
     else:
         swarm_args['goal'] = np.array(state['destinations']['coords'])[:2,0].reshape(2,1).tolist()
-    step_args = {k:v for k,v in state['params'].items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'pc', 'pr', 'pkr']}
+    step_args = {k:v for k,v in state['params'].items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'compression', 'pc', 'pr', 'pkr']}
     b = mk_swarm(state['agents']['coords'][0], state['agents']['coords'][1], **swarm_args)
     goal = state['destinations']['coords'][:][0]
     return b, swarm_args, step_args
