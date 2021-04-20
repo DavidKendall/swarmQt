@@ -65,13 +65,13 @@ class Display(QWidget):
     self.stepCt = 1
     self.running = False
     self.kwargs = kwargs
-    self.xv = None;  self.yv = None; self.mag = None; self.ang = None;
-    self.ecf = None; self.erf = None
+    self.xv  = None;  self.yv = None; self.mag = None; self.ang = None
+    self.ecf = None; self.erf = None; self.ekc = None; self.ekr = None
     if not 'speed' in kwargs:
       kwargs['speed'] = 0.05
  
     # Initialise model on basis of initial data      
-    self.xv, self.yv, self.mag, self.ang, self.ecf, self.erf, _, _ = mdl.compute_step(self.dta, **self.kwargs)
+    self.xv, self.yv, self.mag, self.ang, self.ecf, self.erf, self.ekc, self.ekr = mdl.compute_step(self.dta, **self.kwargs)
     self.agtClrs = np.where(self.dta[mdl.PRM],1,0) 
     self.infoDsp = InfoDisplay()
     
@@ -87,7 +87,7 @@ class Display(QWidget):
   # Step the model
   def step(self):
     mdl.apply_step(self.dta) # update positions from prevous step computation and do next  one ...
-    self.xv, self.yv, self.mag, self.ang, self.ecf, self.erf, _, _ = mdl.compute_step(self.dta, **self.kwargs)
+    self.xv, self.yv, self.mag, self.ang, self.ecf, self.erf, self.ekc, self.ekr = mdl.compute_step(self.dta, **self.kwargs)
     self.agtClrs = np.where(self.dta[mdl.PRM],1,0) 
     self.showCircles = []
     self.update()
@@ -98,27 +98,67 @@ class Display(QWidget):
     ax = (event.x()/self.size().width() - 0.5) * self.scaleFact    
     ay = -(event.y()/self. size().height() - 0.5) * self.scaleFact    
     print("({0:.2f},{1:.2f})  ".format(ax,ay), end="\r")
+    
+  # Helper to infoMsg(): test if agents m, n are out of range or subtend a reflex angle at agent i 
+  def isGap(self, i, m, n):
+    outOfRange = (self.mag[m,n] > self.ecf[m,n])
+    delta = self.ang[n,i] - self.ang[m,i]
+    if (delta < 0):
+      delta += np.pi * 2.0;
+    reflex = (delta > np.pi)
+    return outOfRange or reflex
 
-  #Helper to following function: Assemble information string about an agent;
+  #Helper to mouse pressed event function: Assemble information string about an agent;
   #update display colour of neighbouring agents
   def infoMsg(self, agt):
     msg = "\nAgent {:d} at ({:.2f},{:.2f})".format(agt, self.dta[mdl.POS_X,agt], self.dta[mdl.POS_Y,agt])
     if self.dta[mdl.PRM, agt]:
-      msg += " (on perim)"
-    if self.mag is not None: # once d_step has run, xv, yv, mag are all non-null
-      msg += "\n{:d} neighbours".format(int(self.dta[mdl.COH_N,agt]))
-      if self.dta[mdl.COH_N,agt] > 0:
-        msg += ":"
-        for j in range(self.dta.shape[1]):
-          if self.mag[agt,j] <= self.ecf[agt,j] and agt != j:
-            msg += " {:d}:{:.3f}\u221f{:.1f};".format(j, self.mag[agt,j], self.ang[j,agt]*180/np.pi)
-      msg += "\n{:d} repellors".format(int(self.dta[mdl.REP_N,agt]))     
-      if self.dta[mdl.REP_N,agt] > 0:
-        msg += ":"
-        for j in range(self.dta.shape[1]):
-          if self.mag[agt,j] <= self.erf[agt,j] and agt != j:
-            msg += " {:d}:{:.3f}\u221f{:.1f};".format(j, self.mag[agt,j], self.ang[j,agt]*180/np.pi)
+      msg += " (on perim)\n"
+    else:
       msg += "\n"
+    msg += mdl.attributeString(self.dta, agt)
+    
+    if self.mag is None:
+      return msg
+    # once step has been computed, xv, yv, mag are all non-null:
+    msg += "\n{:d} neighbours".format(int(self.dta[mdl.COH_N,agt]))
+    if self.dta[mdl.COH_N,agt] > 0: # display neighbours in angle order, with details ...
+      msg += ":"
+      nbrs = []
+      for j in range(self.dta.shape[1]):
+        if self.mag[agt,j] <= self.ecf[agt,j] and agt != j:
+          k = 0
+          while k < len(nbrs) and self.ang[nbrs[k],agt] < self.ang[j,agt]:
+            k += 1
+          if k == len(nbrs):
+            nbrs.append(j)
+          else:
+            nbrs.insert(k,j)
+      for j in nbrs:
+        msg += "\n({:04d}):{:.3f}\u221f{:.1f}: ecf = {:.5f}, ekc = {:.5f};".format(
+          j, self.mag[agt,j], self.ang[j,agt]*180/np.pi, self.ecf[agt,j], self.ekc[agt,j])
+        k = (nbrs.index(j)+1)%len(nbrs)
+        if self.isGap(agt, j, nbrs[k]):
+          msg += " <-GAP->" 
+      msg += "\n"
+            
+    msg += "\n{:d} repellors".format(int(self.dta[mdl.REP_N,agt]))     
+    if self.dta[mdl.REP_N,agt] > 0: # display repellers in angle order, with details ...
+      msg += ":"
+      rplrs = []
+      for j in range(self.dta.shape[1]):
+        if self.mag[agt,j] <= self.erf[agt,j] and agt != j:
+          k = 0
+          while k < len(rplrs) and self.ang[rplrs[k],agt] < self.ang[j,agt]:
+            k += 1
+          if k == len(rplrs):
+            rplrs.append(j)
+          else:
+            rplrs.insert(k,j)
+      for j in rplrs:
+        msg += "\n({:04d}):{:.3f}\u221f{:.1f}: erf = {:.5f}, ekr = {:.5f};".format(
+          j, self.mag[agt,j], self.ang[j,agt]*180/np.pi, self.erf[agt,j], self.ekr[agt,j])
+    msg += "\n------"
     return msg
 
   # If mouse clicked while animation paused, display data of agent(s) within 5 px of click; display COH,
@@ -221,7 +261,7 @@ class InfoDisplay(QMainWindow):
     super(InfoDisplay, self).__init__(parent=parent)
     
     self.setWindowTitle("Information Display")
-    self.setGeometry(900, 0, 600, 700)
+    self.setGeometry(900, 0, 700, 700)
     self.centralwidget = QWidget(self)
     self.centralwidget.setObjectName("centralwidget")
     self.setCentralWidget(self.centralwidget)
