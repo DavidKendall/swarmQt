@@ -62,9 +62,9 @@ default_swarm_params = {
     'exp_rate' : 0.2,
     'speed' : 0.05,
     'stability_factor' : 0.0,
-    'pr' : 1.0,
-    'pkc' : 1.0,
-    'pkr': [1.0, 1.0]
+    'pr' : [[1.0,1.0],[1.0,1.0]],
+    'pkc' : [[1.0,1.0],[1.0,1.0]],
+    'pkr': [[1.0,1.0],[1.0,1.0]]
 }
 
 def mk_rand_swarm(n, *, cb=4.0, rb=3.0, kc=1.0, kr=1.0, kd=0.0, kg=0.0, goal=[[0.0], [0.0]], loc=0.0, grid=10, seed=None):
@@ -238,25 +238,17 @@ def onPerim(b, xv, yv, mag, ecb):
 
 
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
-def compute_erf(b, pr, pkc, pkr_outer, pkr_inner):
+def compute_erf(b, pr, pkc, pkr):
     n_agents = b.shape[1]
+    p = b[PRM].astype(np.int64)
     erf = np.empty((n_agents, n_agents))
     ekc = np.empty((n_agents, n_agents))
     ekr = np.empty((n_agents, n_agents))
     for i in prange(n_agents):
         for j in range(n_agents):
-            erf[i,j] = b[RF][i]
-            ekc[i,j] = b[KC][i]
-            ekr[i,j] = b[KR][i]
-            if b[PRM][i] and b[PRM][j]:    # both perimeter agents
-                 erf[i,j] *= pr
-                 ekc[i,j] *= pkc
-            elif b[PRM][i]:                # agent i is perimeter, agent j is internal
-                ekr[i,j] *= pkr_outer
-            elif b[PRM][j]:                # agent i is internal, agent j is perimeter
-                ekr[i,j] *= pkr_inner
-            else:
-                pass
+            erf[i,j] = b[RF][i] * pr[p[i],p[j]]
+            ekc[i,j] = b[KC][i] * pkc[p[i],p[j]]
+            ekr[i,j] = b[KR][i] * pkr[p[i],p[j]]
     return erf, ekc, ekr
 
 @jit(nopython=True, fastmath=True, parallel=True, cache=True)
@@ -310,7 +302,7 @@ def update_resultant(b, stability_factor, speed):
             b[RES_X][i] = 0.0
             b[RES_Y][i] = 0.0
 
-def compute_step(b, *, scaling='linear', exp_rate=1.2, speed=0.05, perim_coord=False, stability_factor=0.0, pr=1.0, pkc=1.0, pkr=[1.0,1.0]):
+def compute_step(b, *, scaling='linear', exp_rate=1.2, speed=0.05, perim_coord=False, stability_factor=0.0, pr=np.array([[1.0,1.0],[1.0,1.0]]), pkc=np.array([[1.0,1.0],[1.0,1.0]]), pkr=np.array([[1.0,1.0],[1.0,1.0]])):
     """
     Compute one step in the evolution of swarm `b`, update the COH, REP, DIR and RES fields
     :param b: the array modelling the state of the swarm
@@ -335,7 +327,7 @@ def compute_step(b, *, scaling='linear', exp_rate=1.2, speed=0.05, perim_coord=F
     b[PRM], ang = onPerim(b, xv, yv, mag, ecb)
 
    # compute the effective repulsion field, cohesion weight and repulsion weight
-    erf, ekc, ekr = compute_erf(b, pr, pkc, pkr[0], pkr[1])
+    erf, ekc, ekr = compute_erf(b, pr, pkc, pkr)
 
     # compute the cohesion vectors
     compute_coh(b, xv, yv, mag, ecb, ekc)
@@ -372,8 +364,8 @@ def apply_step(b):
     b[POS_X:POS_Y+1] += b[RES_X:RES_Y+1]
     np.around(b[POS_X:POS_Y+1], 9, out=b[POS_X:POS_Y+1])
 
-def d_step(b, *, scaling='linear', exp_rate=0.2, speed=0.05, perim_coord=False, stability_factor=0.0, pc=1.0, pr=1.0, pkr=1.0):
-    xv,yv,mag,ang,ecf,erf,ekc,ekr = compute_step(b, scaling=scaling, exp_rate=exp_rate, speed=speed, perim_coord=perim_coord, stability_factor=stability_factor, pc=pc, pr=pr, pkr=pkr)
+def d_step(b, *, scaling='linear', exp_rate=1.2, speed=0.05, perim_coord=False, stability_factor=0.0, pr=np.array([[1.0,1.0],[1.0,1.0]]), pkc=np.array([[1.0,1.0],[1.0,1.0]]), pkr=np.array([[1.0,1.0],[1.0,1.0]])):
+    xv,yv,mag,ang,ecf,erf,ekc,ekr = compute_step(b, scaling=scaling, exp_rate=exp_rate, speed=speed, perim_coord=perim_coord, stability_factor=stability_factor, pr=pr, pkc=pkc, pkr=pkr)
     apply_step(b)
     return xv,yv,mag,ang,ecf,erf,ekc,ekr
 
@@ -463,11 +455,15 @@ def readCoords(path):
     ys = cds[1::2]
     return xs, ys
 
-def dump_swarm(b, swarm_args, step_args, path='swarm.json'):
+def dump_swarm(b, swarm_args, step_args_ro, path='swarm.json'):
     goal = swarm_args['goal']
     swarm_args = {k:v for k,v in swarm_args.items() if k in ['cb', 'rb', 'kc', 'kr', 'kd', 'kg']}
     coords = b[POS_X:POS_Y+1,:].tolist()
     coords.append([0.0] * b.shape[1])
+    step_args = step_args_ro.copy()
+    step_args['pr'] = step_args['pr'].tolist()
+    step_args['pkc'] = step_args['pkc'].tolist()
+    step_args['pkr'] = step_args['pkr'].tolist()
     state = {
         'params': {**default_swarm_params, **swarm_args, **step_args},
         'agents': {'coords': coords},
@@ -478,11 +474,15 @@ def dump_swarm(b, swarm_args, step_args, path='swarm.json'):
         json.dump(state, f, indent=4)
         f.close()
 
-def dump_swarm_txt(b, swarm_args, step_args, path='swarm.txt'):
+def dump_swarm_txt(b, swarm_args, step_args_ro, path='swarm.txt'):
     goal = swarm_args['goal']
     swarm_args = {k:v for k,v in swarm_args.items() if k in ['cb', 'rb', 'kc', 'kr', 'kd', 'kg']}
     coords = b[POS_X:POS_Y+1,:].tolist()
     coords.append([0.0] * b.shape[1])
+    step_args = step_args_ro.copy()
+    step_args['pr'] = step_args['pr'].tolist()
+    step_args['pkc'] = step_args['pkc'].tolist()
+    step_args['pkr'] = step_args['pkr'].tolist()
     state = {
         'params': {**default_swarm_params, **swarm_args, **step_args},
         'agents': {'coords': coords},
@@ -507,6 +507,9 @@ def load_swarm(path='swarm.json'):
     else:
         swarm_args['goal'] = np.array(state['destinations']['coords'])[:2,0].reshape(2,1).tolist()
     step_args = {k:v for k,v in state['params'].items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'pr', 'pkc', 'pkr']}
+    step_args['pr'] = np.array(step_args['pr'])
+    step_args['pkc'] = np.array(step_args['pkc'])
+    step_args['pkr'] = np.array(step_args['pkr'])
     b = mk_swarm(state['agents']['coords'][0], state['agents']['coords'][1], **swarm_args)
     goal = state['destinations']['coords'][:][0]
     return b, swarm_args, step_args

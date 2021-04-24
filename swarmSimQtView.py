@@ -493,12 +493,15 @@ Run the QtView
 '''
 def runQtView(args):
   swarm_args = {k:v for k,v in args.items() if k in ['random', 'load_state', 'read_coords', 'cf', 'rf', 'kc', 'kr', 'kd', 'kg', 'goal', 'loc', 'grid', 'seed'] and v is not None}
-  step_args = {k:v for k,v in args.items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'compression', 'pc', 'pr', 'pkr'] and v is not None}
   if 'random' in swarm_args.keys():
     n = swarm_args['random']
     goal = json.loads(swarm_args['goal'])
     swarm_args['goal'] = [[goal[0]], [goal[1]]]
     del swarm_args['random']
+    step_args = {k:v for k,v in args.items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'pr', 'pkc', 'pkr'] and v is not None}
+    step_args['pr'] = np.array(json.loads(step_args['pr']))
+    step_args['pkc'] = np.array(json.loads(step_args['pkc']))
+    step_args['pkr'] = np.array(json.loads(step_args['pkr']))
     b = mdl.mk_rand_swarm(n, **swarm_args)
   elif 'read_coords' in swarm_args.keys():
     b, swarm_args, step_args = mdl.load_swarm()
@@ -535,10 +538,9 @@ parser.add_argument('--exp_rate', type=float, help='exponential rate if scaling=
 parser.add_argument('--speed', type=float, help='distance moved per unit time')
 parser.add_argument('--perim_coord', action='store_true', help='use only perimeter agents in goal seeking')
 parser.add_argument('--stability_factor', type=float, help='constrain agent movement if magnitude of resultant vector is less than STABILITY_FACTOR * speed')
-parser.add_argument('--compression', type=int, help='choose style of compression: 0 - None, 1 - Outer, 2 - Inner')
-parser.add_argument('--pc', type=float, help='multiply cohesion weight by PC (>= 1.0) for perimeter agents')
-parser.add_argument('--pr', type=float, help='multiply repulsion field radius by PR (0 < PR <= 1.0) for perimeter agents')
-parser.add_argument('--pkr', type=float, help='multiply repulsion weight by PKR for perimeter -> internal agents')
+parser.add_argument('--pr', default='[[1.0,1.0], [1.0,1.0]]', help='multiply repulsion field radius by PR where PR is a string like "[[1.0,1.0], [1.0,0.4]]"')
+parser.add_argument('--pkc', default='[[1.0,1.0], [1.0,1.0]]', help='multiply cohesion weight by PKC where PKC is a string like "[[1.0,1.0], [1.0,0.4]]"')
+parser.add_argument('--pkr', default='[[1.0,1.0], [1.0,1.0]]', help='multiply repulsion weight by PKR where PKR is a string like "[[1.0,1.0], [0.2,1.0]]"')
 args = vars(parser.parse_args())
 runQtView(args)
 
