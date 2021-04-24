@@ -10,7 +10,7 @@
     []
   ]},
   "params": {
-    "pr": 0.875,
+    "pr": 0.4,
     "scaling": "linear",
     "ko": 1000,
     "kr": 50,
@@ -18,13 +18,13 @@
     "rb": 2,
     "perim_coord": false,
     "ob": 3,
-    "pkc": 75.0,
+    "pkc": 500.0,
     "exp_rate": 0.20000000298023224,
     "stability_factor": 0,
-    "pkr": [1.0, 10.0],
+    "pkr": [0.2, 0.2],
     "kc": 0.15,
     "kd": 0,
-    "kg": 10,
+    "kg": 50,
     "cb": 3
   },
   "agents": {"coords": [
