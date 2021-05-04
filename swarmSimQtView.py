@@ -71,7 +71,7 @@ class Display(QWidget):
       kwargs['speed'] = 0.05
 
     # Initialise model on basis of initial data
-    self.xv, self.yv, self.mag, self.ang, self.ecf, self.erf, self.ekc, self.ekr = mdl.compute_step(self.dta, **self.kwargs)
+    self.xv, self.yv, self.mag, self.ang, self.cb = mdl.compute_step(self.dta, **self.kwargs)
     self.agtClrs = np.where(self.dta[mdl.PRM],1,0)
     self.infoDsp = InfoDisplay()
 
@@ -87,7 +87,7 @@ class Display(QWidget):
   # Step the model
   def step(self):
     mdl.apply_step(self.dta) # update positions from prevous step computation and do next  one ...
-    self.xv, self.yv, self.mag, self.ang, self.ecf, self.erf, self.ekc, self.ekr = mdl.compute_step(self.dta, **self.kwargs)
+    self.xv, self.yv, self.mag, self.ang, self.cb = mdl.compute_step(self.dta, **self.kwargs)
     self.agtClrs = np.where(self.dta[mdl.PRM],1,0)
     self.showCircles = []
     self.update()
@@ -456,7 +456,7 @@ class Window(QWidget):
   def saveState(self):
     path, ok = QInputDialog.getText(self, "Save","Path:", QLineEdit.Normal, "")
     if ok and path != '':
-      mdl.saveState(self.dsp.dta, path)
+      mdl.dump_state(self.dsp.dta, self.dsp.kwargs, path)
 
   def loadState(self):
     path, ok = QInputDialog.getText(self, "Load","Path:", QLineEdit.Normal, "")
@@ -492,26 +492,26 @@ Run the QtView
 :args: a list of command-line arguments created by argparse
 '''
 def runQtView(args):
-  swarm_args = {k:v for k,v in args.items() if k in ['random', 'load_state', 'read_coords', 'cf', 'rf', 'kc', 'kr', 'kd', 'kg', 'goal', 'loc', 'grid', 'seed'] and v is not None}
+  swarm_args = {k:v for k,v in args.items() if k in ['random', 'load_state', 'read_coords', 'goal', 'loc', 'grid', 'seed'] and v is not None}
   if 'random' in swarm_args.keys():
     n = swarm_args['random']
     goal = json.loads(swarm_args['goal'])
     swarm_args['goal'] = [[goal[0]], [goal[1]]]
     del swarm_args['random']
-    step_args = {k:v for k,v in args.items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'pr', 'pkc', 'pkr'] and v is not None}
-    step_args['pr'] = np.array(json.loads(step_args['pr']))
-    step_args['pkc'] = np.array(json.loads(step_args['pkc']))
-    step_args['pkr'] = np.array(json.loads(step_args['pkr']))
+    step_args = {k:v for k,v in args.items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'cb', 'rb', 'kc', 'kr', 'kd', 'kg'] and v is not None}
+    step_args['rb'] = np.array(json.loads(step_args['pr']))
+    step_args['kc'] = np.array(json.loads(step_args['pkc']))
+    step_args['kr'] = np.array(json.loads(step_args['pkr']))
     b = mdl.mk_rand_swarm(n, **swarm_args)
   elif 'read_coords' in swarm_args.keys():
-    b, swarm_args, step_args = mdl.load_swarm()
+    b, step_args = mdl.load_swarm()
   elif 'load_state' in swarm_args.keys():
     b = mdl.loadState(swarm_args['load_state'])
   else:
     print("Error in swarm creation")
     return
 
-  mdl.dump_swarm(b, swarm_args, step_args)
+  mdl.dump_swarm(b, step_args)
   app = QApplication([]) # constructor requires no runtime args
   win = Window(b, step_args)
   win.show()
@@ -524,9 +524,6 @@ swarm.add_argument('-r', '--random', type=int, help='create random swarm of size
 swarm.add_argument('-s', '--load_state', help='load initial swarm state from LOAD_STATE')
 swarm.add_argument('-c', '--read_coords', help='read initial agent positions from READ_COORDS')
 parser.add_argument('--cb', type=float, help='radius of the cohesion field')
-parser.add_argument('--rb', type=float, help='radius of the repulsion field')
-parser.add_argument('--kc', type=float, help='weight of the cohesion vector')
-parser.add_argument('--kr', type=float, help='weight of the repulsion vector')
 parser.add_argument('--kd', type=float, help='weight of the direction vector')
 parser.add_argument('--kg', type=float, help='weight of the gap reduction vector')
 parser.add_argument('--goal', default='[0.0, 0.0]', help='GOAL should be a string like "[10.0, 15.5]"')
@@ -537,10 +534,11 @@ parser.add_argument('--scaling', choices=['linear', 'quadratic', 'exponential'],
 parser.add_argument('--exp_rate', type=float, help='exponential rate if scaling="exponential"')
 parser.add_argument('--speed', type=float, help='distance moved per unit time')
 parser.add_argument('--perim_coord', action='store_true', help='use only perimeter agents in goal seeking')
+parser.add_argument('--rgf', action='store_true', help='fill gap on reflex angle when gap filling')
 parser.add_argument('--stability_factor', type=float, help='constrain agent movement if magnitude of resultant vector is less than STABILITY_FACTOR * speed')
-parser.add_argument('--pr', default='[[1.0,1.0], [1.0,1.0]]', help='multiply repulsion field radius by PR where PR is a string like "[[1.0,1.0], [1.0,0.4]]"')
-parser.add_argument('--pkc', default='[[1.0,1.0], [1.0,1.0]]', help='multiply cohesion weight by PKC where PKC is a string like "[[1.0,1.0], [1.0,0.4]]"')
-parser.add_argument('--pkr', default='[[1.0,1.0], [1.0,1.0]]', help='multiply repulsion weight by PKR where PKR is a string like "[[1.0,1.0], [0.2,1.0]]"')
+parser.add_argument('--rb', default='[[2.0,2.0], [2.0,2.0]]', help='repulsion field radius is RB where RB is a string like "[[1.0,1.0], [1.0,0.4]]"')
+parser.add_argument('--kc', default='[[1.0,1.0], [1.0,1.0]]', help='cohesion weight is KC where KC is a string like "[[1.0,1.0], [1.0,0.4]]"')
+parser.add_argument('--kr', default='[[1.0,1.0], [1.0,1.0]]', help='repulsion weight is KR where KR is a string like "[[1.0,1.0], [0.2,1.0]]"')
 args = vars(parser.parse_args())
 runQtView(args)
 
