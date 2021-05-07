@@ -10,21 +10,18 @@
     []
   ]},
   "params": {
-    "pr": 1.0,
-    "scaling": "linear",
-    "ko": 1000,
-    "kr": 50,
-    "speed": 0.05000000074505806,
-    "rb": 2,
-    "perim_coord": false,
-    "ob": 4,
-    "pc": 1.0,
-    "exp_rate": 0.20000000298023224,
-    "stability_factor": 0,
-    "kc": 0.15000000596046448,
-    "kd": 0,
-    "kg": 0,
-    "cb": 3
+      "scaling": "linear",
+      "kr": [[50.0,50.0], [50.0,50.0]],
+      "speed": 0.05,
+      "rb": [[2.0,2.0], [2.0,2.0]],
+      "perim_coord": false,
+      "exp_rate": 0.20000000298023224,
+      "stability_factor": 0,
+      "kc": [[0.15,0.15], [0.15,0.15]],
+      "kd": 0,
+      "kg": 0,
+      "cb": 3,
+      "rgf": true
   },
   "agents": {"coords": [
     [

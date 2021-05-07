@@ -1,20 +1,17 @@
 {
     "params": {
-        "cb": 3.0,
-        "rb": 2.0,
-        "ob": 3.0,
-        "kc": 0.15,
-        "kr": 50.0,
-        "kd": 0.0,
-        "ko": 0.0,
-        "kg": 0.0,
-        "scaling": "linear",
-        "exp_rate": 0.2,
-        "speed": 0.05,
-        "stability_factor": 0,
-        "pc": 1.0,
-        "pr": 1.0,
-        "perim_coord": false
+      "scaling": "linear",
+      "kr": [[50.0,50.0], [50.0,50.0]],
+      "speed": 0.05,
+      "rb": [[2.0,2.0], [2.0,2.0]],
+      "perim_coord": false,
+      "exp_rate": 0.20000000298023224,
+      "stability_factor": 0,
+      "kc": [[0.15,0.15], [0.15,0.15]],
+      "kd": 0,
+      "kg": 0,
+      "cb": 3,
+      "rgf": true
     },
     "agents": {
         "coords": [
