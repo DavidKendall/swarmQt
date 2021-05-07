@@ -77,8 +77,6 @@ def mk_rand_swarm(n, *, goal=[[0.0], [0.0]], loc=0.0, grid=10, seed=None):
     b[DIR_X:DIR_Y+1,:] = 0.                         # direction vectors initially [0.0, 0.0]
     b[RES_X:RES_Y + 1,:] = 0.                       # resultant vectors initially [0.0, 0.0]
     b[GOAL_X:GOAL_Y + 1,:] = goal                   # goal is at [goal[0], goal[1]], default [0.0, 0.0]
-    b[KD,:] = kd                                    # direction weight for all agents set to kd
-    b[KG,:] = kg                                    # gap reduction weight for all agents set to kg
     b[PRM,:] = False                                # initially no agents known to be on perimeter
     b[GAP_X:GAP_Y+1,:] = 0.                         # gap vectors initially [0.0, 0.0]
     b[COH_N,:] = 0.                                 # initially no cohesion neighbours
@@ -109,8 +107,13 @@ def mk_swarm(xs, ys, *, goal=[[0.0], [0.0]]):
     b[REP_N,:] = 0.                                 # initially no repulsion neighbours
     return b
 
+'''
+def swmParamStg():
+  stg =
+  return stg
+'''
 # Display string for attribute values in column i of b
-def attributeString(b, i):
+def agtAttrStrg(b, i):
   stg  = "POS_X = {:.10f}, POS_Y = {:.10f}, PRM = {:.10f}\n".format(b[POS_X][i], b[POS_Y][i], b[PRM][i])
   stg += "COH_X = {:.10f}, COH_Y = {:.10f}, COH_N = {:.10f}\n".format(b[COH_X][i], b[COH_Y][i], b[COH_N][i])
   stg += "REP_X = {:.10f}, REP_Y = {:.10f}, REP_N = {:.10f}\n".format(b[REP_X][i], b[REP_Y][i], b[REP_N][i])
@@ -118,8 +121,6 @@ def attributeString(b, i):
   stg += "DIR_X = {:.10f}, DIR_Y = {:.10f}\n".format(b[DIR_X][i], b[DIR_Y][i])
   stg += "RES_X = {:.10f}, RES_Y = {:.10f}, ".format(b[RES_X][i], b[RES_Y][i])
   stg += "GOAL_X = {:.10f}, GOAL_Y = {:.10f}\n".format(b[GOAL_X][i], b[GOAL_Y][i])
-  stg += "CF = {:.10f}, RF = {:.10f}, KC = {:.10f}\n".format(b[CF][i], b[RF][i], b[KC][i])
-  stg += "KR = {:.10f}, KD = {:.10f}, KG = {:.10f}\n".format(b[KR][i], b[KD][i], b[KG][i])
   return stg
 
 # Numba-accelerated simulator
@@ -254,7 +255,7 @@ def compute_rep_exponential(b, xv, yv, mag, rb, kr, p, exp_rate):
             if j != i and mag[j, i] <= rb[p[i],p[j]]:
                 b[REP_N][i] = b[REP_N][i] + 1
                 b[REP_X][i] = b[REP_X][i] + (-rb[p[i],p[j]] * (np.e ** (-mag[j,i] * exp_rate)) * (xv[j,i] / mag[j,i]) * kr[p[i],p[j]])
-                b[REP_Y][i] = b[REP_Y][i] + (--rb[p[i],p[j]] * (np.e ** (-mag[j,i] * exp_rate)) * (yv[j,i] / mag[j,i]) * kr[p[i],p[j]])
+                b[REP_Y][i] = b[REP_Y][i] + (-rb[p[i],p[j]] * (np.e ** (-mag[j,i] * exp_rate)) * (yv[j,i] / mag[j,i]) * kr[p[i],p[j]])
 
 @jit(nopython=True, fastmath=True, cache=True)
 def update_resultant(b, stability_factor, speed):
@@ -291,9 +292,6 @@ def compute_step(b, *, scaling='linear', exp_rate=1.2, speed=0.05, perim_coord=F
     # compute the perimeter, including gap vectors for gap reduction
     p, ang = onPerim(b, xv, yv, mag, cb, kg, rgf)
     b[PRM] = p
-
-   # compute the effective repulsion field, cohesion weight and repulsion weight
-#     erf, ekc, ekr = compute_erf(b, rb, kc, kr)
 
     # compute the cohesion vectors
     compute_coh(b, xv, yv, mag, cb, kc, p)
