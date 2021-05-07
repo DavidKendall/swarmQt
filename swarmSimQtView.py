@@ -66,12 +66,15 @@ class Display(QWidget):
     self.running = False
     self.kwargs = kwargs
     self.xv  = None;  self.yv = None; self.mag = None; self.ang = None
-    self.ecf = None; self.erf = None; self.ekc = None; self.ekr = None
+    self.cb = kwargs['cb']
+    self.rb = kwargs['rb']
+    self.kc = kwargs['kc']
+    self.kr = kwargs['kr']
     if not 'speed' in kwargs:
       kwargs['speed'] = 0.05
 
     # Initialise model on basis of initial data
-    self.xv, self.yv, self.mag, self.ang, self.cb = mdl.compute_step(self.dta, **self.kwargs)
+    self.xv, self.yv, self.mag, self.ang, _ = mdl.compute_step(self.dta, **self.kwargs)
     self.agtClrs = np.where(self.dta[mdl.PRM],1,0)
     self.infoDsp = InfoDisplay()
 
@@ -84,14 +87,16 @@ class Display(QWidget):
     self.showCohOn = False
     self.show()
 
+
   # Step the model
   def step(self):
     mdl.apply_step(self.dta) # update positions from prevous step computation and do next  one ...
-    self.xv, self.yv, self.mag, self.ang, self.cb = mdl.compute_step(self.dta, **self.kwargs)
+    self.xv, self.yv, self.mag, self.ang, _ = mdl.compute_step(self.dta, **self.kwargs)
     self.agtClrs = np.where(self.dta[mdl.PRM],1,0)
     self.showCircles = []
     self.update()
     self.stepCt += 1
+
 
   # Display position pointed at my mouse, in swarm coordinates
   def mouseMoveEvent(self, event):
@@ -99,34 +104,43 @@ class Display(QWidget):
     ay = -(event.y()/self. size().height() - 0.5) * self.scaleFact
     print("({0:.2f},{1:.2f})  ".format(ax,ay), end="\r")
 
+
   # Helper to infoMsg(): test if agents m, n are out of range or subtend a reflex angle at agent i
-  def isGap(self, i, m, n):
-    outOfRange = (self.mag[m,n] > self.ecf[m,n])
+  def isReflex(self, i, m, n):
     delta = self.ang[n,i] - self.ang[m,i]
     if (delta < 0):
       delta += np.pi * 2.0;
-    reflex = (delta > np.pi)
-    return outOfRange or reflex
+    return (delta > np.pi)
+
+
+  #Swarm args display string
+  def argsDisplayString(self):
+    stg = ''
+    for k,v in self.kwargs.items():
+      stg += "{0}:{1}\n".format(k,v)
+    return stg
+
 
   #Helper to mouse pressed event function: Assemble information string about an agent;
   #update display colour of neighbouring agents
   def infoMsg(self, agt):
     msg = "\nAgent {:d} at ({:.2f},{:.2f})".format(agt, self.dta[mdl.POS_X,agt], self.dta[mdl.POS_Y,agt])
-    if self.dta[mdl.PRM, agt]:
+    agtPrm = int(self.dta[mdl.PRM, agt])
+    if agtPrm:
       msg += " (on perim)\n"
     else:
       msg += "\n"
-    msg += mdl.attributeString(self.dta, agt)
-
+    msg += mdl.agtAttrStrg(self.dta, agt)
     if self.mag is None:
       return msg
+
     # once step has been computed, xv, yv, mag are all non-null:
     msg += "\n{:d} neighbours".format(int(self.dta[mdl.COH_N,agt]))
     if self.dta[mdl.COH_N,agt] > 0: # display neighbours in angle order, with details ...
       msg += ":"
       nbrs = []
       for j in range(self.dta.shape[1]):
-        if self.mag[agt,j] <= self.ecf[agt,j] and agt != j:
+        if self.mag[agt,j] <= self.cb and agt != j:
           k = 0
           while k < len(nbrs) and self.ang[nbrs[k],agt] < self.ang[j,agt]:
             k += 1
@@ -135,19 +149,24 @@ class Display(QWidget):
           else:
             nbrs.insert(k,j)
       for j in nbrs:
-        msg += "\n({:04d}):{:.3f}\u221f{:.1f}: ecf = {:.5f}, ekc = {:.5f};".format(
-          j, self.mag[agt,j], self.ang[j,agt]*180/np.pi, self.ecf[agt,j], self.ekc[agt,j])
+        jPrm = int(self.dta[mdl.PRM, j])
+        msg += "\n({:04d}):{:.3f}\u221f{:.1f}: cb = {:.5f}, kc = {:.5f};".format(
+          j, self.mag[agt,j], self.ang[j,agt]*180/np.pi, self.cb, self.kc[agtPrm,jPrm])
         k = (nbrs.index(j)+1)%len(nbrs)
-        if self.isGap(agt, j, nbrs[k]):
-          msg += " <-GAP->"
+        if self.mag[j, nbrs[k]] > self.cb: # nbrs out of range
+          msg += " RgGAP"
+        if self.isReflex(agt, j, nbrs[k]): # nbrs make reflex angle at agt
+          msg += " RFLX"
       msg += "\n"
+
 
     msg += "\n{:d} repellors".format(int(self.dta[mdl.REP_N,agt]))
     if self.dta[mdl.REP_N,agt] > 0: # display repellers in angle order, with details ...
       msg += ":"
       rplrs = []
       for j in range(self.dta.shape[1]):
-        if self.mag[agt,j] <= self.erf[agt,j] and agt != j:
+        jPrm = int(self.dta[mdl.PRM, j])
+        if self.mag[agt,j] <= self.rb[agtPrm,jPrm] and agt != j:
           k = 0
           while k < len(rplrs) and self.ang[rplrs[k],agt] < self.ang[j,agt]:
             k += 1
@@ -156,8 +175,8 @@ class Display(QWidget):
           else:
             rplrs.insert(k,j)
       for j in rplrs:
-        msg += "\n({:04d}):{:.3f}\u221f{:.1f}: erf = {:.5f}, ekr = {:.5f};".format(
-          j, self.mag[agt,j], self.ang[j,agt]*180/np.pi, self.erf[agt,j], self.ekr[agt,j])
+        msg += "\n({:04d}):{:.3f}\u221f{:.1f}: rb = {:.5f}, kr = {:.5f};".format(
+          j, self.mag[agt,j], self.ang[j,agt]*180/np.pi, self.rb[agtPrm,jPrm], self.kr[agtPrm,jPrm])
     msg += "\n------"
     return msg
 
@@ -166,6 +185,7 @@ class Display(QWidget):
   def mousePressEvent(self, evt):
     if self.running:
       return
+    
     # find agents pointed at (within 5 px):
     inrange = np.hypot(((self.dta[mdl.POS_X]/self.scaleFact + 0.5)*self.size().width() - evt.x()),
                       (-self.dta[mdl.POS_Y]/self.scaleFact + 0.5)*self.size().height() - evt.y()) < 5
@@ -174,10 +194,11 @@ class Display(QWidget):
     if not mods == Qt.ShiftModifier:
       self.showCircles = []
     self.showCircles.extend(np.where(inrange)[0])
+    message = self.argsDisplayString()
     if len(self.showCircles) == 0:
-      message = "\n{:d} steps:\nNo agents in range".format(self.stepCt)
+      message += "\n{:d} steps:\nNo agents in range".format(self.stepCt)
     else:
-      message = "\n{:d} steps:".format(self.stepCt)
+      message += "\n{:d} steps:".format(self.stepCt)
       for i in self.showCircles:
         message += self.infoMsg(i)
       self.update()
@@ -224,19 +245,24 @@ class Display(QWidget):
       qp.setPen(pallette[self.agtClrs[i]])
       qp.drawEllipse(gx-2, gy-2, 4, 4)
       if i in self.showCircles:
-        rx = int(self.dta[mdl.CF,i]/self.scaleFact*width);
-        ry = int(self.dta[mdl.CF,i]/self.scaleFact*height)
+        rx = int(self.cb/self.scaleFact*width);
+        ry = int(self.cb/self.scaleFact*height)
         qp.setPen(Qt.darkGreen)
         qp.drawEllipse(gx-rx, gy-ry, 2*rx, 2*ry)
-        rx = int(self.dta[mdl.RF,i]/self.scaleFact*width);
-        ry = int(self.dta[mdl.RF,i]/self.scaleFact*height)
+        
+        iPrm = int(self.dta[mdl.PRM, i])
+        rx = int(self.rb[iPrm,0]/self.scaleFact*width);
+        ry = int(self.rb[iPrm,0]/self.scaleFact*height)
         qp.setPen(Qt.magenta)
+        qp.drawEllipse(gx-rx, gy-ry, 2*rx, 2*ry)
+        rx = int(self.rb[iPrm,1]/self.scaleFact*width);
+        ry = int(self.rb[iPrm,1]/self.scaleFact*height)
         qp.drawEllipse(gx-rx, gy-ry, 2*rx, 2*ry)
 
     if self.showCohOn:
       for i in range(lh):
         for j in range(i):
-          if self.mag[i,j] <= self.ecf[i,j] or self.mag[j,i] <= self.ecf[j,i]:
+          if self.mag[i,j] <= self.cb:
             if self.dta[mdl.PRM,i] and self.dta[mdl.PRM,j]:
               qp.setPen(Qt.red)
             else:
@@ -499,9 +525,9 @@ def runQtView(args):
     swarm_args['goal'] = [[goal[0]], [goal[1]]]
     del swarm_args['random']
     step_args = {k:v for k,v in args.items() if k in ['scaling', 'exp_rate', 'speed', 'perim_coord', 'stability_factor', 'cb', 'rb', 'kc', 'kr', 'kd', 'kg'] and v is not None}
-    step_args['rb'] = np.array(json.loads(step_args['pr']))
-    step_args['kc'] = np.array(json.loads(step_args['pkc']))
-    step_args['kr'] = np.array(json.loads(step_args['pkr']))
+    step_args['rb'] = np.array(json.loads(step_args['rb']))
+    step_args['kc'] = np.array(json.loads(step_args['kc']))
+    step_args['kr'] = np.array(json.loads(step_args['kr']))
     b = mdl.mk_rand_swarm(n, **swarm_args)
   elif 'read_coords' in swarm_args.keys():
     b, step_args = mdl.load_swarm()
