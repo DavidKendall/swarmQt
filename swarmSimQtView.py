@@ -396,8 +396,8 @@ class Window(QWidget):
     self.stpBtn.clicked.connect(self.step)
     self.outBtn.clicked.connect(self.zoomOut)
     self.zInBtn.clicked.connect(self.zoomIn)
-    self.dmpBtn.clicked.connect(self.saveState)
-    self.loadBtn.clicked.connect(self.loadState)
+    self.dmpBtn.clicked.connect(self.dumpState)
+    self.loadBtn.clicked.connect(self.loadSwarm)
     self.clrBtn.clicked.connect(self.clearInfo)
     self.hideBtn.clicked.connect(self.hideInfo)
     self.showBtn.clicked.connect(self.showInfo)
@@ -479,18 +479,19 @@ class Window(QWidget):
     self.scfLbl.setText("{:.1f}".format(self.dsp.scaleFact))
 
   # persistence
-  def saveState(self):
-    path, ok = QInputDialog.getText(self, "Save","Path:", QLineEdit.Normal, "")
+  def dumpState(self):
+    path, ok = QInputDialog.getText(self, "Dump","Path:", QLineEdit.Normal, "")
     if ok and path != '':
-      mdl.dump_state(self.dsp.dta, self.dsp.kwargs, path)
+      mdl.dump_swarm_txt(self.dsp.dta, self.dsp.kwargs, path)
 
-  def loadState(self):
+  def loadSwarm(self):
     path, ok = QInputDialog.getText(self, "Load","Path:", QLineEdit.Normal, "")
     if ok and path != '':
-      self.dsp.dta = mdl.loadState(path)
-      self.dsp.update()    #repaint
-      self.dsp.stepCt = 1  #and reset step count
-
+      self.dsp.dta, self.dsp.kwargs = mdl.load_swarm(path)
+      self.dsp.stepCt = 1  # reset step count
+      self.stpLbl.setText("{:d}".format(self.dsp.stepCt))
+      self.dsp.update()    # repaint
+ 
   # Info pane
   def clearInfo(self):
     self.dsp.infoDsp.tArea.setPlainText("");
